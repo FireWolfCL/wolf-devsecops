@@ -18,6 +18,7 @@ import type {
   ResetPasswordResponse,
   SourceIn,
   SourceOut,
+  SourceTokenStatus,
   TokenResponse,
   UpdateStatusOut,
   UserCreate,
@@ -80,6 +81,15 @@ export const settingsApi = {
   listSources: () => request<SourceOut[]>("/api/v1/settings/sources"),
   putSource: (name: string, body: SourceIn) =>
     request<SourceOut>(`/api/v1/settings/sources/${enc(name)}`, { method: "PUT", json: body }),
+  // Guarda el VALOR del token cifrado en reposo (write-only). La respuesta nunca trae el valor.
+  setSourceToken: (name: string, token: string) =>
+    request<SourceTokenStatus>(`/api/v1/settings/sources/${enc(name)}/token`, {
+      method: "PUT",
+      json: { token },
+    }),
+  // Borra el token cifrado: la fuente vuelve a resolver desde la variable de entorno.
+  clearSourceToken: (name: string) =>
+    request<SourceTokenStatus>(`/api/v1/settings/sources/${enc(name)}/token`, { method: "DELETE" }),
   listProjects: () => request<ProjectCfgOut[]>("/api/v1/settings/projects"),
   createProject: (body: ProjectCfgIn) =>
     request<ProjectCfgOut>("/api/v1/settings/projects", { method: "POST", json: body }),

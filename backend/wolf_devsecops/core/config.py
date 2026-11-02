@@ -7,10 +7,11 @@ el arranque: una credencial versionada acaba en producción.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Claves que delatan un secreto escrito a mano en el YAML (en vez de token_env).
 _FORBIDDEN_SECRET_KEYS = {"token", "api_token", "password", "secret"}
@@ -23,6 +24,13 @@ class ConfigError(Exception):
 class SourceConfig(BaseModel):
     url: str  # base de la API (de api_url o base_url en el YAML)
     token_env: str  # NOMBRE de la variable de entorno, nunca el valor
+    # Ciphertext Fernet del token guardado en BD (0006, opt-in). Lo porta la config
+    # en memoria para que el conector (vía `resolve_token`) le dé PRECEDENCIA sobre la
+    # env var, sin tocar la BD en el hot-path. `exclude=True` + `repr=False`: jamás
+    # entra en un model_dump(), un log ni un repr — es material de credencial cifrado.
+    token_cipher: str | None = Field(default=None, exclude=True, repr=False)
+    # Expiración conocida del token (no sensible): la expone el panel de Integraciones.
+    token_expires_at: datetime | None = None
 
 
 class GitHubProjectConfig(BaseModel):

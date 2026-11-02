@@ -26,8 +26,31 @@ from .base import Connector, ConnectorUnavailable
 
 _API_VERSION = "2022-11-28"
 
+# Cabecera que GitHub devuelve para tokens que expiran (fine-grained PAT, o classic con
+# expiración). Formato típico: "2026-12-31 23:59:59 UTC". Los classic sin expiración no
+# la mandan. Capturarla deja que el panel avise antes de que el token venza (item 5/6).
+_TOKEN_EXPIRY_HEADER = "github-authentication-token-expiration"
+
 _FAILURE = {"failure", "timed_out", "startup_failure", "cancelled", "action_required"}
 _RUNNING = {"in_progress", "queued", "requested", "waiting", "pending"}
+
+
+def _parse_token_expiration(value: str | None) -> datetime | None:
+    """Parsea la cabecera de expiración del token a un datetime UTC consciente de zona.
+    Tolera el formato de GitHub ('YYYY-MM-DD HH:MM:SS UTC') y un ISO-8601 estándar.
+    Devuelve None si está vacía o no parsea (no revienta: la expiración es best-effort)."""
+    if not value:
+        return None
+    raw = value.strip()
+    # Formato GitHub: "2026-12-31 23:59:59 UTC" / "... +0000".
+    normalized = raw.replace(" UTC", "+0000").replace("Z", "+00:00")
+    for candidate in (normalized, normalized.replace(" ", "T", 1)):
+        try:
+            dt = datetime.fromisoformat(candidate)
+        except ValueError:
+            continue
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+    return None
 
 
 def _map_ci_status(conclusion: str | None, status: str | None) -> CIStatus:
@@ -58,6 +81,9 @@ class GitHubConnector(Connector):
         # transport inyectable: los tests de contrato le pasan un MockTransport
         # con respuestas-ejemplo grabadas; en producción es None (red real).
         self._transport = transport
+        # Última expiración vista en una respuesta de GitHub (cabecera del token). La
+        # capa de ruta (que sí tiene sesión BD) la persiste tras probe(). None = no vista.
+        self.last_token_expiry: datetime | None = None
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=10.0, transport=self._transport)
@@ -81,6 +107,10 @@ class GitHubConnector(Connector):
                 resp = await client.get(f"{self._base}/rate_limit", headers=self._headers())
             reachable = True
             authenticated = resp.status_code == 200 and bool(self.token)
+            # Captura (best-effort) la expiración del token si GitHub la anuncia.
+            self.last_token_expiry = _parse_token_expiration(
+                resp.headers.get(_TOKEN_EXPIRY_HEADER)
+            )
             version = resp.headers.get("X-GitHub-Api-Version", _API_VERSION)
             return ProbeResult(
                 source=self.source_name,

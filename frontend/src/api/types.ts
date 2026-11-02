@@ -306,6 +306,9 @@ export interface SourceOut {
   token_env: string;
   enabled: boolean;
   token_present: boolean;
+  token_source: string; // "db" | "env" | "none"
+  token_expires_at: string | null;
+  token_expiring_soon: boolean;
   updated_at: string | null;
 }
 
@@ -315,12 +318,29 @@ export interface SourceIn {
   enabled: boolean;
 }
 
+/** PUT /settings/sources/{name}/token — write-only: solo el VALOR entra, nunca sale. */
+export interface SourceTokenIn {
+  token: string;
+}
+
+/** Respuesta de PUT/DELETE del token: confirma presencia/origen, jamás el valor. */
+export interface SourceTokenStatus {
+  name: string;
+  token_present: boolean;
+  token_source: string; // "db" | "env" | "none"
+  token_expires_at: string | null;
+  token_expiring_soon: boolean;
+}
+
 /** GET /settings/available-sources: catálogo (configurada o no). */
 export interface AvailableSource {
   name: string;
   configured: boolean;
   enabled: boolean;
   token_present: boolean;
+  token_source: string; // "db" (token cifrado en BD) | "env" (variable) | "none"
+  token_expires_at: string | null;
+  token_expiring_soon: boolean;
   supported_versions: string;
 }
 

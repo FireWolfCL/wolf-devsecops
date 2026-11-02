@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -35,6 +36,16 @@ class SourceConfigRow(Base):
     name: Mapped[str] = mapped_column(String(40), primary_key=True)  # github/defectdojo/...
     url: Mapped[str] = mapped_column(String(400), nullable=False)
     token_env: Mapped[str] = mapped_column(String(120), nullable=False)  # NOMBRE, no valor
+    # Almacén cifrado OPT-IN del token (0006, COMPLEMENTA ADR-002). Fernet ciphertext
+    # (misma llave/patrón que el secreto MFA; separada de la firma JWT). El texto plano
+    # NUNCA se persiste; `resolve_token` le da PRECEDENCIA sobre `token_env`. NULL = la
+    # fuente resuelve su token desde el entorno (comportamiento original).
+    token_cipher: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Expiración conocida del token (cabecera del proveedor, p. ej. GitHub). NULL =
+    # desconocida/sin expiración. No es sensible: se expone al panel para el recordatorio.
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, onupdate=func.now(), server_default=func.now()

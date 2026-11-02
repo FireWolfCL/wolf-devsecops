@@ -19,12 +19,21 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..models_db.config import SourceConfigRow, SystemConfigRow
 from ..models_db.events import ProjectEvent
 from ..settings import Settings
 
 log = logging.getLogger(__name__)
 
 _SEV_RANK = {"info": 0, "good": 1, "warn": 2, "danger": 3}
+_TOKEN_REMINDER_DAYS = 7
+_REMINDER_MARKER = "token_reminder_last"  # SystemConfigRow: {source: iso del último aviso}
+
+
+def _has_channel(settings: Settings) -> bool:
+    return bool(settings.telegram_bot_token and settings.telegram_chat_id) or bool(
+        settings.smtp_host and settings.notify_email_to
+    )
 _ICON = {
     "new_critical": "🔴", "resolved_critical": "✅", "new_high": "🟠",
     "resolved_high": "✅", "improved": "📈", "worsened": "📉",
@@ -121,10 +130,7 @@ async def dispatch_pending(
     para no acumular indefinidamente (evita avalancha al configurar un canal)."""
     # Sin ningún canal configurado no marcamos nada: así, al conectar un canal más
     # tarde, las novedades recientes (hasta `limit`) sí se envían.
-    has_channel = bool(settings.telegram_bot_token and settings.telegram_chat_id) or bool(
-        settings.smtp_host and settings.notify_email_to
-    )
-    if not has_channel:
+    if not _has_channel(settings):
         return {"pending": 0, "sent": 0, "channels": [], "skipped": "sin canales"}
 
     threshold = _SEV_RANK.get(settings.notify_min_severity, 1)
@@ -152,6 +158,67 @@ async def dispatch_pending(
         e.dispatched_at = now
     await session.commit()
     return {"pending": len(pending), "sent": len(to_send), "channels": channels_ok}
+
+
+async def check_token_expiry(session: AsyncSession, settings: Settings) -> dict:
+    """Recordatorio de renovación: si el token de alguna fuente vence en <= 7 días
+    (o ya venció), avisa por los canales configurados. La fecha es fija (capturada al
+    probar la conexión), así que no hay refresco. Dedup: a lo sumo un aviso por fuente
+    cada 24 h (marcador en system_config)."""
+    if not _has_channel(settings):
+        return {"reminded": 0, "skipped": "sin canales"}
+    now = datetime.now(UTC)
+    cutoff = now + timedelta(days=_TOKEN_REMINDER_DAYS)
+    rows = list((await session.execute(select(SourceConfigRow))).scalars())
+    expiring = [r for r in rows if r.token_expires_at is not None and r.token_expires_at <= cutoff]
+    if not expiring:
+        return {"reminded": 0}
+
+    marker = (
+        await session.execute(select(SystemConfigRow).where(SystemConfigRow.key == _REMINDER_MARKER))
+    ).scalar_one_or_none()
+    sent: dict = dict((marker.value or {}).get("v", {})) if marker else {}
+
+    to_send = []
+    for r in expiring:
+        last = sent.get(r.name)
+        if last:
+            try:
+                if now - datetime.fromisoformat(last) < timedelta(hours=24):
+                    continue
+            except ValueError:
+                pass
+        to_send.append(r)
+    if not to_send:
+        return {"reminded": 0}
+
+    es = settings.notify_lang != "en"
+    lines = ["🔑 <b>" + ("Tokens por vencer" if es else "Tokens expiring") + "</b>"]
+    for r in to_send:
+        when = r.token_expires_at.strftime("%Y-%m-%d")
+        days = (r.token_expires_at - now).days
+        if r.token_expires_at <= now:
+            lines.append(f"• <b>{r.name}</b>: " + (f"VENCIDO ({when})" if es else f"EXPIRED ({when})"))
+        else:
+            lines.append(f"• <b>{r.name}</b>: " + (f"vence en {days}d ({when})" if es else f"expires in {days}d ({when})"))
+    lines.append("Renuévalo en Integraciones." if es else "Renew it in Integrations.")
+    text = "\n".join(lines)
+    subject = "Wolf DevSecOps — token por vencer" if es else "Wolf DevSecOps — token expiring"
+
+    channels: list[str] = []
+    if await send_telegram(settings, text):
+        channels.append("telegram")
+    if await send_email(settings, subject, text):
+        channels.append("email")
+
+    for r in to_send:
+        sent[r.name] = now.isoformat()
+    if marker is None:
+        session.add(SystemConfigRow(key=_REMINDER_MARKER, value={"v": sent}))
+    else:
+        marker.value = {"v": sent}
+    await session.commit()
+    return {"reminded": len(to_send), "channels": channels}
 
 
 async def send_test(settings: Settings) -> dict:

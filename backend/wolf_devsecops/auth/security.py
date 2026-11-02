@@ -187,6 +187,29 @@ def decrypt_mfa_secret(token: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Cifrado del token de una FUENTE en reposo (0006, COMPLEMENTA ADR-002)
+# ---------------------------------------------------------------------------
+# Reusa EXACTAMENTE la misma primitiva y la misma llave de reposo que el secreto MFA
+# (`mfa_fernet_key`): es la ÚNICA llave de cifrado-en-reposo de la instancia, para no
+# introducir una gestión de llaves nueva. Separación de claves intacta donde importa:
+# esta llave de reposo (cifrado simétrico reversible) sigue siendo DISTINTA de la que
+# FIRMA los JWT de sesión (`jwt_secret`). Firmar ≠ cifrar: esa frontera no se cruza.
+def encrypt_source_token(token: str) -> str:
+    """Cifra el VALOR de un token de fuente para guardarlo en `source_config.token_cipher`
+    (nunca en claro). El llamador ya validó que `token` no está vacío."""
+    return _fernet().encrypt(token.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_source_token(ciphertext: str) -> str:
+    """Descifra el token de una fuente. Lanza ValueError si el ciphertext es inválido o
+    la clave no corresponde (nunca devuelve un token basura silenciosamente)."""
+    try:
+        return _fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+    except InvalidToken as exc:
+        raise ValueError("token de fuente inválido o corrupto") from exc
+
+
+# ---------------------------------------------------------------------------
 # TOTP (pyotp)
 # ---------------------------------------------------------------------------
 def generate_totp_secret() -> str:

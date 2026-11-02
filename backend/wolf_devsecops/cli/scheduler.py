@@ -35,6 +35,9 @@ async def _cycle() -> tuple[int, dict]:
         )
     async with sm() as session:
         disp = await notification_service.dispatch_pending(session, settings)
+    async with sm() as session:
+        rem = await notification_service.check_token_expiry(session, settings)
+    disp["token_reminders"] = rem.get("reminded", 0)
     return written, disp
 
 

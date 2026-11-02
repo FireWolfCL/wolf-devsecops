@@ -83,6 +83,74 @@ function ConnectForm({ name, onDone, onCancel }: { name: string; onDone: () => v
   );
 }
 
+// Pegar el VALOR del token: se cifra en reposo (Fernet) con precedencia sobre la env var.
+// El valor nunca se muestra ni vuelve del servidor; solo se confirma su presencia.
+function TokenForm({ s, onChanged }: { s: AvailableSource; onChanged: () => void }) {
+  const t = useT();
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await settingsApi.setSourceToken(s.name, token);
+      setToken(""); // no retenemos el valor en memoria del navegador
+      onChanged();
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await settingsApi.clearSourceToken(s.name);
+      onChanged();
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={save} style={{ marginTop: 12 }}>
+      <div className="field">
+        <label htmlFor={`int-tok-${s.name}`}>{t("integ.tokenValue")}</label>
+        <input
+          id={`int-tok-${s.name}`}
+          type="password"
+          className="mono"
+          autoComplete="off"
+          maxLength={500}
+          placeholder={s.token_source === "db" ? t("integ.tokenReplace") : t("integ.tokenPaste")}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+        />
+        <span className="hint">{t("integ.tokenValueHint")}</span>
+      </div>
+      {error && <div className="alert err" role="alert">{error}</div>}
+      <div className="form-actions">
+        <button className="btn primary" type="submit" disabled={busy || !token.trim()}>
+          {busy ? t("common.saving") : t("integ.tokenSave")}
+        </button>
+        {s.token_source === "db" && (
+          <button className="btn" type="button" onClick={clear} disabled={busy}>
+            {t("integ.tokenClear")}
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
 function SourceCard({ s, onChanged }: { s: AvailableSource; onChanged: () => void }) {
   const t = useT();
   const [connecting, setConnecting] = useState(false);
@@ -115,10 +183,21 @@ function SourceCard({ s, onChanged }: { s: AvailableSource; onChanged: () => voi
         {s.configured && (
           <span className={`badge ${s.token_present ? "ok" : "danger"}`}>{s.token_present ? t("integ.tokenPresent") : t("integ.tokenAbsent")}</span>
         )}
+        {s.configured && s.token_present && (
+          <span className="badge">{s.token_source === "db" ? t("integ.tokenFromDb") : t("integ.tokenFromEnv")}</span>
+        )}
+        {s.configured && s.token_expiring_soon && (
+          <span className="badge danger">{t("integ.tokenExpiringSoon")}</span>
+        )}
       </div>
       <div className="muted" style={{ fontSize: 12 }}>
         {t("integ.supportedVersions")} <span className="mono">{s.supported_versions}</span>
       </div>
+      {s.configured && s.token_expires_at && (
+        <div className="muted" style={{ fontSize: 12 }}>
+          {t("integ.tokenExpires")} <span className="mono">{new Date(s.token_expires_at).toLocaleDateString()}</span>
+        </div>
+      )}
 
       {s.configured && (
         <div style={{ marginTop: 12 }}>
@@ -127,6 +206,7 @@ function SourceCard({ s, onChanged }: { s: AvailableSource; onChanged: () => voi
           </button>
           {error && <div className="alert err" role="alert">{error}</div>}
           {probe && <ProbePanel r={probe} />}
+          <TokenForm s={s} onChanged={onChanged} />
         </div>
       )}
 

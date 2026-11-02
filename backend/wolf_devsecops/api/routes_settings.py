@@ -12,6 +12,8 @@ resuelto en el servidor; el VALOR del token jamás entra ni sale por aquí.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,8 +34,34 @@ from ..schemas_admin import (
     ProjectOut,
     SourceIn,
     SourceOut,
+    SourceTokenIn,
+    SourceTokenStatusOut,
 )
 from ..services import audit_service, config_service
+
+# Umbral del aviso "vence pronto" (item 6). El envío de la notificación es del scheduler.
+_EXPIRING_SOON = timedelta(days=7)
+
+
+def _is_expiring_soon(expires_at: datetime | None) -> bool:
+    """True si `expires_at` cae dentro de los próximos 7 días. Normaliza fechas naive
+    (SQLite las devuelve sin zona) asumiendo UTC."""
+    if expires_at is None:
+        return False
+    exp = expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=UTC)
+    return exp - datetime.now(UTC) <= _EXPIRING_SOON
+
+
+def _token_status(row: SourceConfigRow) -> tuple[bool, str]:
+    """(token_present, token_source) de una fuente. `token_source`: 'db' si hay token
+    cifrado válido en BD (tiene precedencia), 'env' si solo está la variable de entorno,
+    'none' si no hay token por ninguna vía. Nunca expone el valor."""
+    db_present = bool(row.token_cipher) and resolve_token(None, row.token_cipher) is not None
+    if db_present:
+        return True, "db"
+    if resolve_token(row.token_env) is not None:
+        return True, "env"
+    return False, "none"
 
 router = APIRouter(
     prefix="/api/v1/settings",
@@ -45,13 +73,28 @@ _admin = Depends(require_role(*roles_for("settings.manage")))
 
 
 def _source_out(row: SourceConfigRow) -> SourceOut:
+    present, source = _token_status(row)
     return SourceOut(
         name=row.name,
         url=row.url,
         token_env=row.token_env,
         enabled=row.enabled,
-        token_present=resolve_token(row.token_env) is not None,
+        token_present=present,
+        token_source=source,
+        token_expires_at=row.token_expires_at,
+        token_expiring_soon=_is_expiring_soon(row.token_expires_at),
         updated_at=row.updated_at,
+    )
+
+
+def _token_status_out(row: SourceConfigRow) -> SourceTokenStatusOut:
+    present, source = _token_status(row)
+    return SourceTokenStatusOut(
+        name=row.name,
+        token_present=present,
+        token_source=source,
+        token_expires_at=row.token_expires_at,
+        token_expiring_soon=_is_expiring_soon(row.token_expires_at),
     )
 
 
@@ -109,6 +152,44 @@ async def put_source(
     return _source_out(row)
 
 
+@router.put("/sources/{name}/token", response_model=SourceTokenStatusOut)
+async def set_source_token(
+    name: str,
+    payload: SourceTokenIn,
+    admin: User = _admin,
+    db: AsyncSession = Depends(get_db),
+) -> SourceTokenStatusOut:
+    """Guarda el VALOR del token de una fuente CIFRADO en reposo (Fernet), con
+    precedencia sobre la env var. Admin + MFA (router). COMPLEMENTA ADR-002: no
+    reemplaza el modelo env-only; lo añade como opción opt-in para conectar sin editar
+    .env. El texto plano no se persiste, no se devuelve ni se audita: la respuesta solo
+    confirma `token_present`, y la auditoría registra la acción SIN el valor."""
+    try:
+        row = await config_service.set_source_token(
+            db, name, payload.token, updated_by=admin.username
+        )
+    except config_service.ConfigWriteError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    # Auditoría SIN el token: solo que se fijó uno cifrado para esta fuente.
+    await _audit(db, admin, "config.source_token_set", "source", name,
+                 {"token_source": "db"})
+    return _token_status_out(row)
+
+
+@router.delete("/sources/{name}/token", response_model=SourceTokenStatusOut)
+async def clear_source_token(
+    name: str, admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> SourceTokenStatusOut:
+    """Borra el token cifrado de una fuente: vuelve a resolver desde la variable de
+    entorno (modelo original). Admin + MFA. Nunca expone el valor."""
+    row = await config_service.clear_source_token(db, name, updated_by=admin.username)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Fuente no configurada: {name}")
+    await _audit(db, admin, "config.source_token_cleared", "source", name,
+                 {"token_source": _token_status(row)[1]})
+    return _token_status_out(row)
+
+
 @router.get("/available-sources")
 async def available_sources(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Catálogo de integraciones: toda fuente que el producto sabe conectar
@@ -118,11 +199,15 @@ async def available_sources(db: AsyncSession = Depends(get_db)) -> list[dict]:
     out = []
     for name in CONNECTOR_REGISTRY:
         row = rows.get(name)
+        present, source = _token_status(row) if row else (False, "none")
         out.append({
             "name": name,
             "configured": row is not None,
             "enabled": bool(row.enabled) if row else False,
-            "token_present": resolve_token(row.token_env) is not None if row else False,
+            "token_present": present,
+            "token_source": source,  # db | env | none
+            "token_expires_at": row.token_expires_at if row else None,
+            "token_expiring_soon": _is_expiring_soon(row.token_expires_at) if row else False,
             "supported_versions": CONNECTOR_REGISTRY[name].supported_versions,
         })
     return out
@@ -157,10 +242,15 @@ async def test_source(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     connector = CONNECTOR_REGISTRY[name](
-        SourceConfig(url=row.url, token_env=row.token_env),
-        resolve_token(row.token_env),
+        SourceConfig(url=row.url, token_env=row.token_env, token_cipher=row.token_cipher),
+        resolve_token(row.token_env, row.token_cipher),  # BD cifrada > env
     )
     result = await connector.probe()
+    # Si el conector capturó la expiración del token (p. ej. GitHub la anuncia en la
+    # cabecera), se persiste para que el panel y el recordatorio sepan cuándo vence.
+    expiry = getattr(connector, "last_token_expiry", None)
+    if expiry is not None:
+        await config_service.record_source_token_expiry(db, name, expiry)
     await _audit(db, admin, "config.source_tested", "source", name,
                  {"reachable": result.reachable, "authenticated": result.authenticated,
                   "compatible": result.compatible})

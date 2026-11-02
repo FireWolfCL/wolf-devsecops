@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -88,7 +89,17 @@ async def assemble_app_config(session: AsyncSession) -> AppConfig:
     source_rows = (
         await session.execute(select(SourceConfigRow).where(SourceConfigRow.enabled.is_(True)))
     ).scalars().all()
-    sources = {r.name: SourceConfig(url=r.url, token_env=r.token_env) for r in source_rows}
+    sources = {
+        r.name: SourceConfig(
+            url=r.url,
+            token_env=r.token_env,
+            # Se PORTA el ciphertext (no el texto plano) a la config en memoria: el
+            # conector lo descifra al vuelo vía resolve_token, con precedencia sobre env.
+            token_cipher=r.token_cipher,
+            token_expires_at=r.token_expires_at,
+        )
+        for r in source_rows
+    }
 
     project_rows = (
         await session.execute(select(ProjectRow).where(ProjectRow.enabled.is_(True)))
@@ -324,6 +335,67 @@ async def list_source_rows(session: AsyncSession) -> list[SourceConfigRow]:
     )
 
 
+# ─── Almacén cifrado del token de una fuente (0006, COMPLEMENTA ADR-002) ─────────
+# El VALOR del token se guarda SOLO cifrado (Fernet, llave de reposo de la instancia).
+# El texto plano nunca se persiste, nunca se devuelve y nunca se audita. Da PRECEDENCIA
+# sobre `token_env` (ver core/credentials.resolve_token). Opt-in por fuente: permite
+# conectar desde la UI sin editar deploy/.env, sin romper el modelo env-only existente.
+
+
+async def set_source_token(
+    session: AsyncSession, name: str, token_plain: str, *, updated_by: str | None = None
+) -> SourceConfigRow:
+    """Cifra y guarda el token de una fuente YA configurada. La fuente debe existir
+    (se crea antes con `upsert_source`/Conectar). Lanza ConfigWriteError si no existe o
+    si el token viene vacío. Tras escribir, reensambla la config (hot-reload): el nuevo
+    token toma efecto en el próximo request sin reiniciar el proceso."""
+    from ..auth.security import encrypt_source_token
+
+    row = await session.get(SourceConfigRow, name)
+    if row is None:
+        raise ConfigWriteError(f"Fuente no configurada: {name}")
+    token = (token_plain or "").strip()
+    if not token:
+        raise ConfigWriteError("El token no puede estar vacío.")
+    row.token_cipher = encrypt_source_token(token)  # texto plano se descarta aquí
+    row.updated_by = updated_by
+    await session.commit()
+    await _after_write(session)
+    await session.refresh(row)
+    return row
+
+
+async def clear_source_token(
+    session: AsyncSession, name: str, *, updated_by: str | None = None
+) -> SourceConfigRow | None:
+    """Borra el token cifrado de una fuente: vuelve a resolver desde la env var.
+    También limpia la expiración (era del token recién borrado). None si no existe."""
+    row = await session.get(SourceConfigRow, name)
+    if row is None:
+        return None
+    row.token_cipher = None
+    row.token_expires_at = None
+    row.updated_by = updated_by
+    await session.commit()
+    await _after_write(session)
+    await session.refresh(row)
+    return row
+
+
+async def record_source_token_expiry(
+    session: AsyncSession, name: str, expires_at: datetime | None
+) -> None:
+    """Persiste la expiración del token de una fuente (capturada del proveedor, p. ej.
+    la cabecera `github-authentication-token-expiration`). No-op si la fuente no existe o
+    si la fecha no cambió. Reensambla la config para que el panel vea la fecha al vuelo."""
+    row = await session.get(SourceConfigRow, name)
+    if row is None or row.token_expires_at == expires_at:
+        return
+    row.token_expires_at = expires_at
+    await session.commit()
+    await _after_write(session)
+
+
 async def project_exists(session: AsyncSession, key: str) -> bool:
     return (await session.get(ProjectRow, key)) is not None
 
@@ -356,6 +428,7 @@ async def upsert_project(
     name: str,
     sources: dict[str, dict],
     enabled: bool = True,
+    org: str | None = None,
 ) -> dict:
     """Crea o reemplaza un proyecto y su sub-config por fuente (reemplazo total de
     `project_sources`). Cada sub-config se valida contra su modelo tipado; los campos

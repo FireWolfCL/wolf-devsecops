@@ -159,7 +159,7 @@ async def code_fix_project(
     file_path, line = _split_target(str(target))
 
     settings = get_settings()
-    read_token = resolve_token(gh_source.token_env)  # token de LECTURA, nunca se devuelve
+    read_token = resolve_token(gh_source.token_env, gh_source.token_cipher)  # LECTURA, nunca se devuelve
     try:
         result, redacted = await propose_code_fix(
             config=config,

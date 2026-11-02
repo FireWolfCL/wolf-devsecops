@@ -71,7 +71,7 @@ class Aggregator:
         cls = CONNECTOR_REGISTRY.get(source_name)
         if source is None or cls is None:
             return None
-        token = resolve_token(source.token_env)
+        token = resolve_token(source.token_env, source.token_cipher)  # BD cifrada > env
         return cls(source, token)
 
     def _project_uses(self, project: ProjectConfig, source_name: str) -> bool:

@@ -6,6 +6,7 @@ import typer
 
 from .bot import bot
 from .create_admin import create_admin
+from .import_org import import_org
 from .init import run_init
 from .notify import notify
 from .scheduler import scheduler
@@ -26,6 +27,8 @@ app.command(name="notify")(notify)
 app.command(name="scheduler")(scheduler)
 # Bot de Telegram para consultar el estatus desde el chat.
 app.command(name="bot")(bot)
+# Alta masiva de los repos ACTIVOS de una organización GitHub.
+app.command(name="import-org")(import_org)
 
 
 @app.command()

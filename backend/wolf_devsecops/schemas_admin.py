@@ -128,8 +128,32 @@ class SourceOut(BaseModel):
     url: str
     token_env: str
     enabled: bool
-    token_present: bool  # la variable existe en el entorno del servidor (nunca el valor)
+    token_present: bool  # hay un token efectivo (de BD cifrada O del entorno), nunca el valor
+    token_source: str = "none"  # "db" (cifrado en BD) | "env" (variable) | "none"
+    token_expires_at: datetime | None = None  # expiración conocida del token (no sensible)
+    token_expiring_soon: bool = False  # vence en < 7 días
     updated_at: datetime | None = None
+
+
+class SourceTokenIn(BaseModel):
+    """PUT /settings/sources/{name}/token — write-only. El VALOR del token se cifra y se
+    guarda; jamás se devuelve, loguea ni audita. `extra="forbid"`: cualquier campo extra
+    inesperado → 422 y nada se procesa."""
+
+    model_config = _STRICT
+
+    token: str = Field(min_length=1, max_length=500)
+
+
+class SourceTokenStatusOut(BaseModel):
+    """Respuesta de PUT/DELETE del token: SOLO confirma presencia y origen, nunca el
+    valor ni un prefijo."""
+
+    name: str
+    token_present: bool
+    token_source: str  # "db" | "env" | "none"
+    token_expires_at: datetime | None = None
+    token_expiring_soon: bool = False
 
 
 class ProjectIn(BaseModel):
