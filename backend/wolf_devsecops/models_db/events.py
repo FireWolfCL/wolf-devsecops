@@ -42,6 +42,10 @@ class ProjectEvent(Base):
     crit_delta: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     high_delta: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Marca de envío por los canales externos (Telegram/email). NULL = pendiente.
+    dispatched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class EventRead(Base):

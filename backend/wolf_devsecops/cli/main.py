@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import typer
 
+from .bot import bot
 from .create_admin import create_admin
 from .init import run_init
+from .notify import notify
+from .scheduler import scheduler
 from .snapshot_posture import snapshot_posture
 from .sync_config import sync_config
 
@@ -17,6 +20,12 @@ app.command(name="create-admin")(create_admin)
 app.command(name="sync-config")(sync_config)
 # Snapshot agregado de postura por proyecto (ADR-019, tendencia histórica).
 app.command(name="snapshot-posture")(snapshot_posture)
+# Notificaciones (item M): dispatch de novedades a Telegram/email (y --test).
+app.command(name="notify")(notify)
+# Bucle periódico: snapshot + notify cada WOLF_SNAPSHOT_INTERVAL_SECONDS.
+app.command(name="scheduler")(scheduler)
+# Bot de Telegram para consultar el estatus desde el chat.
+app.command(name="bot")(bot)
 
 
 @app.command()

@@ -99,6 +99,23 @@ class Settings(BaseSettings):
     # devuelve, loguea ni audita. WOLF_GITHUB_WRITE_TOKEN_ENV.
     github_write_token_env: str = "GITHUB_WRITE_TOKEN"  # noqa: S105 (nombre de env var, no secreto)
 
+    # ── Notificaciones (item M). Canales opcionales: si el token/host está vacío,
+    #    ese canal se omite. El scheduler corre snapshot + dispatch cada intervalo.
+    snapshot_interval_seconds: int = 3600  # WOLF_SNAPSHOT_INTERVAL_SECONDS
+    notify_lang: str = "es"  # idioma de los mensajes salientes (es|en)
+    notify_min_severity: str = "good"  # info|good|warn|danger — umbral mínimo (good = incluye mejoras)
+    # Telegram (push + bot de estatus). Token de @BotFather, chat/grupo destino.
+    telegram_bot_token: str = ""  # WOLF_TELEGRAM_BOT_TOKEN
+    telegram_chat_id: str = ""  # WOLF_TELEGRAM_CHAT_ID
+    # Email (SMTP). Si smtp_host está vacío, no se envía correo.
+    smtp_host: str = ""  # WOLF_SMTP_HOST
+    smtp_port: int = 587  # WOLF_SMTP_PORT
+    smtp_user: str = ""  # WOLF_SMTP_USER
+    smtp_password: str = ""  # WOLF_SMTP_PASSWORD
+    smtp_from: str = ""  # WOLF_SMTP_FROM (remitente; por defecto = smtp_user)
+    smtp_starttls: bool = True  # WOLF_SMTP_STARTTLS
+    notify_email_to: str = ""  # WOLF_NOTIFY_EMAIL_TO (coma-separado)
+
     # --- Primitivas de auth (A1, ADR-013) ----------------------------------
     # Secretos criptográficos: viven SOLO en el entorno (WOLF_JWT_SECRET,
     # WOLF_MFA_FERNET_KEY), nunca en el repo ni en la BD. En production el

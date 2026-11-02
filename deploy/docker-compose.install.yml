@@ -51,6 +51,18 @@ services:
       SONAR_TOKEN: ${SONAR_TOKEN:-}
       HARBOR_TOKEN: ${HARBOR_TOKEN:-}
       TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+      # Notificaciones (item M) — para test manual: docker exec backend wolf-devsecops notify --test
+      WOLF_TELEGRAM_BOT_TOKEN: ${WOLF_TELEGRAM_BOT_TOKEN:-}
+      WOLF_TELEGRAM_CHAT_ID: ${WOLF_TELEGRAM_CHAT_ID:-}
+      WOLF_NOTIFY_LANG: ${WOLF_NOTIFY_LANG:-es}
+      WOLF_NOTIFY_MIN_SEVERITY: ${WOLF_NOTIFY_MIN_SEVERITY:-good}
+      WOLF_SMTP_HOST: ${WOLF_SMTP_HOST:-}
+      WOLF_SMTP_PORT: ${WOLF_SMTP_PORT:-587}
+      WOLF_SMTP_USER: ${WOLF_SMTP_USER:-}
+      WOLF_SMTP_PASSWORD: ${WOLF_SMTP_PASSWORD:-}
+      WOLF_SMTP_FROM: ${WOLF_SMTP_FROM:-}
+      WOLF_SMTP_STARTTLS: ${WOLF_SMTP_STARTTLS:-true}
+      WOLF_NOTIFY_EMAIL_TO: ${WOLF_NOTIFY_EMAIL_TO:-}
     volumes:
       - ../config:/config:ro
     extra_hosts:
@@ -59,6 +71,80 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+  # ═══ Scheduler (item M): snapshot de postura + notificaciones, periódico ═════
+  # Reusa la imagen del backend. Entrypoint directo (NO re-migra: eso lo hace el
+  # backend; evita carrera de alembic). El bucle tolera fallos de un ciclo.
+  scheduler:
+    build: ../backend
+    entrypoint: ["wolf-devsecops"]
+    command: ["scheduler"]
+    healthcheck:
+      disable: true   # no sirve /api/health; es un worker, no la API
+    environment:
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:-}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:-}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_SNAPSHOT_INTERVAL_SECONDS: ${WOLF_SNAPSHOT_INTERVAL_SECONDS:-3600}
+      WOLF_NOTIFY_LANG: ${WOLF_NOTIFY_LANG:-es}
+      WOLF_NOTIFY_MIN_SEVERITY: ${WOLF_NOTIFY_MIN_SEVERITY:-good}
+      WOLF_TELEGRAM_BOT_TOKEN: ${WOLF_TELEGRAM_BOT_TOKEN:-}
+      WOLF_TELEGRAM_CHAT_ID: ${WOLF_TELEGRAM_CHAT_ID:-}
+      WOLF_SMTP_HOST: ${WOLF_SMTP_HOST:-}
+      WOLF_SMTP_PORT: ${WOLF_SMTP_PORT:-587}
+      WOLF_SMTP_USER: ${WOLF_SMTP_USER:-}
+      WOLF_SMTP_PASSWORD: ${WOLF_SMTP_PASSWORD:-}
+      WOLF_SMTP_FROM: ${WOLF_SMTP_FROM:-}
+      WOLF_SMTP_STARTTLS: ${WOLF_SMTP_STARTTLS:-true}
+      WOLF_NOTIFY_EMAIL_TO: ${WOLF_NOTIFY_EMAIL_TO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-}
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  # ═══ Bot de Telegram (consulta de estatus) ═══════════════════════════════════
+  # Solo se levanta útil si WOLF_TELEGRAM_BOT_TOKEN está definido (si no, sale).
+  bot:
+    build: ../backend
+    entrypoint: ["wolf-devsecops"]
+    command: ["bot"]
+    healthcheck:
+      disable: true   # no sirve /api/health; es un worker, no la API
+    environment:
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:-}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:-}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_NOTIFY_LANG: ${WOLF_NOTIFY_LANG:-es}
+      WOLF_TELEGRAM_BOT_TOKEN: ${WOLF_TELEGRAM_BOT_TOKEN:-}
+      WOLF_TELEGRAM_CHAT_ID: ${WOLF_TELEGRAM_CHAT_ID:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-}
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: on-failure   # sin WOLF_TELEGRAM_BOT_TOKEN sale limpio (exit 0, no reinicia)
 
   frontend:
     build: ../frontend
@@ -167,7 +253,7 @@ services:
     # Escanea una imagen con CVEs conocidos para que el panel muestre datos reales.
     command: >-
       image --quiet --scanners vuln --format json
-      --output /reports/cicd.json python:3.9-slim
+      --output /reports/wolf-cloud.json python:3.9-slim
     restart: "no"
 
   trivy:

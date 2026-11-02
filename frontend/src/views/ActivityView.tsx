@@ -34,6 +34,40 @@ function label(kind: string, lang: Lang): string {
 
 const ORDER = ["resolved_critical", "resolved_high", "improved", "new_critical", "new_high", "worsened"];
 
+// Marcador geométrico (mismo lenguaje que la campana y las pastillas del panel):
+// glifo de trazo fino sobre un chip teñido con el color del evento. Sin emojis.
+const GLYPH_KINDS = ["resolved_critical", "resolved_high", "new_critical", "new_high", "improved", "worsened"];
+
+function GlyphPath({ kind }: { kind: string }) {
+  switch (kind) {
+    case "resolved_critical":
+    case "resolved_high":
+      return <path d="M3.5 8.5 L6.5 11.5 L12.5 5" />;
+    case "new_critical":
+    case "new_high":
+      return <path d="M8 3.5 V12.5 M3.5 8 H12.5" />;
+    case "improved":
+      return <path d="M8 12.5 V4 M4.5 7.5 L8 4 L11.5 7.5" />;
+    case "worsened":
+      return <path d="M8 3.5 V12 M4.5 8.5 L8 12 L11.5 8.5" />;
+    default:
+      return <circle cx="8" cy="8" r="2.2" />;
+  }
+}
+
+function KindMarker({ kind, color }: { kind: string; color: string }) {
+  const isDot = !GLYPH_KINDS.includes(kind);
+  return (
+    <span aria-hidden="true" style={{ ...marker, color, background: `${color}1f`, borderColor: `${color}59` }}>
+      <svg viewBox="0 0 16 16" width="15" height="15"
+        fill={isDot ? color : "none"} stroke={isDot ? "none" : color}
+        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <GlyphPath kind={kind} />
+      </svg>
+    </span>
+  );
+}
+
 export function ActivityView() {
   const { lang: appLang } = useI18n();
   const lang: Lang = appLang === "en" ? "en" : "es";
@@ -81,15 +115,15 @@ export function ActivityView() {
         <>
           {/* Resumen grande */}
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "18px 0" }}>
-            <div style={{ ...big, borderColor: "#34d39955" }}>
+            <div style={{ ...big, borderLeftColor: "#34d399" }}>
               <span style={{ ...bigN, color: "#34d399" }}>{resolved}</span>
               <span style={bigL}>{es ? "hallazgos resueltos / parchados" : "findings resolved / patched"}</span>
             </div>
-            <div style={{ ...big, borderColor: "#f8717155" }}>
+            <div style={{ ...big, borderLeftColor: "#f87171" }}>
               <span style={{ ...bigN, color: "#f87171" }}>{introduced}</span>
               <span style={bigL}>{es ? "hallazgos nuevos aparecidos" : "new findings appeared"}</span>
             </div>
-            <div style={{ ...big, borderColor: "#6f9fcf55" }}>
+            <div style={{ ...big, borderLeftColor: "#6f9fcf" }}>
               <span style={{ ...bigN, color: "#6f9fcf" }}>{totals.improved ?? 0}</span>
               <span style={bigL}>{es ? "proyectos que mejoraron de banda" : "projects that improved band"}</span>
             </div>
@@ -98,7 +132,7 @@ export function ActivityView() {
           {/* Desglose por tipo */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
             {ORDER.filter((k) => (totals[k] ?? 0) > 0 || true).map((k) => (
-              <div key={k} style={tile}>
+              <div key={k} style={{ ...tile, borderLeftColor: KIND_COLOR[k] ?? "var(--border)", borderLeftWidth: 3 }}>
                 <span style={{ ...tileN, color: KIND_COLOR[k] }}>{totals[k] ?? 0}</span>
                 <span style={tileL}>{label(k, lang)}</span>
               </div>
@@ -140,7 +174,8 @@ export function ActivityView() {
           {recent.length === 0 && <p style={{ color: "var(--muted)" }}>{es ? "Sin novedades en el período." : "Nothing new in the period."}</p>}
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {recent.map((ev) => (
-              <li key={ev.id} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+              <li key={ev.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                <KindMarker kind={ev.kind} color={KIND_COLOR[ev.kind] ?? "#6f9fcf"} />
                 <span style={{ color: KIND_COLOR[ev.kind] ?? "#6f9fcf", fontFamily: "var(--mono)", minWidth: 150 }}>{label(ev.kind, lang)}</span>
                 <span style={{ fontFamily: "var(--mono)", color: "var(--muted)", minWidth: 110 }}>{ev.project_key}</span>
                 <span style={{ color: "var(--muted)" }}>
@@ -159,7 +194,8 @@ export function ActivityView() {
 
 const chip: CSSProperties = { background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 12 };
 const chipOn: CSSProperties = { background: "var(--accent)", color: "#0b1016", borderColor: "var(--accent)", fontWeight: 700 };
-const big: CSSProperties = { flex: "1 1 200px", background: "var(--surface)", border: "1px solid", borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4 };
+const big: CSSProperties = { flex: "1 1 200px", background: "var(--surface)", border: "1px solid var(--border)", borderLeftWidth: 4, borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4 };
+const marker: CSSProperties = { flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: "1px solid", display: "grid", placeItems: "center" };
 const bigN: CSSProperties = { fontSize: 34, fontWeight: 800, lineHeight: 1 };
 const bigL: CSSProperties = { fontSize: 12.5, color: "var(--muted)" };
 const tile: CSSProperties = { background: "var(--bg-alt)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2 };
