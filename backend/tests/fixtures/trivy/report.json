@@ -1,0 +1,25 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "ghcr.io/firewolfcl/demo-app:1.0",
+  "Results": [
+    {
+      "Target": "demo-app (debian 12)",
+      "Class": "os-pkgs",
+      "Vulnerabilities": [
+        { "VulnerabilityID": "CVE-0001", "Severity": "CRITICAL", "PkgName": "openssl" },
+        { "VulnerabilityID": "CVE-0002", "Severity": "HIGH", "PkgName": "libc" },
+        { "VulnerabilityID": "CVE-0003", "Severity": "HIGH", "PkgName": "zlib" },
+        { "VulnerabilityID": "CVE-0004", "Severity": "MEDIUM", "PkgName": "curl" },
+        { "VulnerabilityID": "CVE-0005", "Severity": "UNKNOWN", "PkgName": "misc" }
+      ]
+    },
+    {
+      "Target": "Dockerfile",
+      "Class": "config",
+      "Misconfigurations": [
+        { "ID": "DS002", "Severity": "MEDIUM", "Title": "root user" },
+        { "ID": "DS026", "Severity": "LOW", "Title": "no healthcheck" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "total_count": 1,
+  "workflow_runs": [
+    {
+      "id": 9876543210,
+      "name": "CI",
+      "run_number": 42,
+      "status": "completed",
+      "conclusion": "success",
+      "head_branch": "main",
+      "html_url": "https://github.com/my-org/demo-app/actions/runs/9876543210",
+      "created_at": "2026-10-31T11:58:00Z",
+      "updated_at": "2026-10-31T12:00:00Z"
+    }
+  ]
+}

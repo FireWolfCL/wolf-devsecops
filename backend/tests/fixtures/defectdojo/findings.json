@@ -1,0 +1,9 @@
+{
+  "count": 4,
+  "results": [
+    { "id": 1, "title": "SQL injection", "severity": "Critical", "active": true },
+    { "id": 2, "title": "Outdated dependency", "severity": "High", "active": true },
+    { "id": 3, "title": "Weak cipher", "severity": "Medium", "active": true },
+    { "id": 4, "title": "Verbose error", "severity": "Low", "active": true }
+  ]
+}

@@ -1,0 +1,51 @@
+# =============================================================================
+# config/projects.yaml — generado por la INSTALACIÓN COMPLETA (de 0).
+# -----------------------------------------------------------------------------
+# Apunta a las fuentes que la propia instalación levanta (nombres de servicio del
+# compose). Sin secretos: solo el NOMBRE de la env var (token_env); los valores
+# viven en deploy/.env y los rellena deploy/provision-sources.sh.
+#
+# ¿Ya tienes un Sonar/DefectDojo/Harbor propio? Cambia su base_url por el tuyo
+# (o hazlo desde el panel /admin/integraciones) — esa es la "opción de agregar
+# los existentes".
+# =============================================================================
+sources:
+  # GitHub: SaaS, se conecta a uno existente (no se autogenera).
+  github:
+    api_url: "https://api.github.com"
+    token_env: "GITHUB_TOKEN"
+
+  # DefectDojo generado por la instalación (servicio defectdojo-nginx:8080).
+  defectdojo:
+    base_url: "http://defectdojo-nginx:8080"
+    token_env: "DEFECTDOJO_TOKEN"
+
+  # SonarQube generado por la instalación (servicio sonarqube:9000).
+  sonarqube:
+    base_url: "http://sonarqube:9000"
+    token_env: "SONAR_TOKEN"
+
+  # Harbor generado por la instalación (compose propio, publicado en el host).
+  harbor:
+    base_url: "http://host.docker.internal:8085"
+    token_env: "HARBOR_TOKEN"
+
+  # Trivy: reporte JSON real publicado por Nginx (servicio trivy:80).
+  trivy:
+    base_url: "http://trivy:80"
+    token_env: "TRIVY_TOKEN"
+
+projects:
+  - key: "cicd"
+    name: "CICD"
+    github:
+      repo: "FireWolfCL/wolf-devsecops"
+      ci_workflow: "ci.yml"
+    defectdojo:
+      product: "CICD"
+    sonarqube:
+      project_key: "cicd"
+    harbor:
+      project: "cicd"
+    trivy:
+      report_path: "cicd.json"

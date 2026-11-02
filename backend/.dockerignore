@@ -1,0 +1,14 @@
+# No copiar al contexto de build (imagen liviana y sin material sensible).
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+tests/
+*.db
+*.sqlite
+.claude/
+.git/
+.env

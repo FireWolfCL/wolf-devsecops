@@ -1,0 +1,72 @@
+# =============================================================================
+# Wolf DevSecOps — PROTOTIPO autohospedado (el producto completo, de 0).
+# -----------------------------------------------------------------------------
+#   Postgres  +  backend (migrado, admin bootstrapeado)  +  frontend (Nginx).
+#
+# Levanta SOLO Wolf DevSecOps. Las fuentes (GitHub, DefectDojo, SonarQube,
+# Harbor, Trivy…) se conectan DESDE el panel /admin/integraciones. Si quieres
+# además levantar Sonar + DefectDojo como objetivos locales, usa
+# docker-compose.full.yml (perfil all-in-one).
+#
+# Secretos y credenciales se leen de deploy/.env (gitignored). Arranque:
+#   docker compose -f deploy/docker-compose.prototype.yml up -d --build
+# Navegador: http://localhost:8088
+# =============================================================================
+name: wolf-devsecops
+
+services:
+  # ─── Base de datos (identidad / config / auditoría — ADR-001) ───────────────
+  db:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: wolf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wolf}
+      POSTGRES_DB: wolf_devsecops
+    volumes:
+      - wolf_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wolf -d wolf_devsecops"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # ─── Backend FastAPI ────────────────────────────────────────────────────────
+  backend:
+    build: ../backend
+    environment:
+      WOLF_ENVIRONMENT: production            # fail-closed: exige JWT/Fernet fuertes
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      DB_HOST: db
+      DB_PORT: "5432"
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:?falta WOLF_JWT_SECRET en deploy/.env}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:?falta WOLF_MFA_FERNET_KEY en deploy/.env}
+      WOLF_CORS_ORIGINS: ${WOLF_CORS_ORIGINS:-http://localhost:8088}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_AI_ENABLED: ${WOLF_AI_ENABLED:-false}
+      # Bootstrap del primer admin (idempotente). La password vive en deploy/.env.
+      WOLF_ADMIN_USERNAME: ${WOLF_ADMIN_USERNAME:-admin}
+      WOLF_ADMIN_PASSWORD: ${WOLF_ADMIN_PASSWORD:?falta WOLF_ADMIN_PASSWORD en deploy/.env}
+      WOLF_ADMIN_EMAIL: ${WOLF_ADMIN_EMAIL:-}
+      # Tokens de fuentes (opcionales; también se pueden pegar desde el panel).
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Frontend (Nginx: SPA + proxy /api) ──────────────────────────────────────
+  frontend:
+    build: ../frontend
+    ports:
+      - "8088:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  wolf_db:

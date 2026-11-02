@@ -1,0 +1,16 @@
+[
+  {
+    "digest": "sha256:aaa111",
+    "tags": [{ "name": "1.0" }],
+    "scan_overview": {
+      "application/vnd.security.vulnerability.report; version=1.1": {
+        "scan_status": "Success",
+        "severity": "Critical",
+        "summary": {
+          "total": 11,
+          "summary": { "Critical": 1, "High": 2, "Medium": 3, "Low": 4, "Unknown": 1 }
+        }
+      }
+    }
+  }
+]

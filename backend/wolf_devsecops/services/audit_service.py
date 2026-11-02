@@ -1,0 +1,50 @@
+"""Writer append-only del `audit_log` (ADR-012 §9).
+
+Regla dura: `detail` va SANEADO. Nunca se persiste token, hash, secreto ni
+stacktrace. El llamador pasa solo metadatos no sensibles.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models_db.audit import AuditLog
+
+# Claves que jamás deben entrar a audit_log.detail (defensa en profundidad).
+_SENSITIVE_KEYS = {"token", "password", "secret", "hashed_password", "mfa_secret", "code"}
+
+
+def _sanitize(detail: dict | None) -> dict | None:
+    if not detail:
+        return detail
+    return {k: v for k, v in detail.items() if k.lower() not in _SENSITIVE_KEYS}
+
+
+async def record(
+    session: AsyncSession,
+    *,
+    action: str,
+    result: str = "success",
+    actor_user_id: str | None = None,
+    actor_username: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    detail: dict | None = None,
+    ip: str | None = None,
+    commit: bool = True,
+) -> None:
+    """Escribe una fila de auditoría. `commit=False` para unirla a otra transacción."""
+    session.add(
+        AuditLog(
+            action=action,
+            result=result,
+            actor_user_id=actor_user_id,
+            actor_username=actor_username,
+            target_type=target_type,
+            target_id=target_id,
+            detail=_sanitize(detail),
+            ip=ip,
+        )
+    )
+    if commit:
+        await session.commit()

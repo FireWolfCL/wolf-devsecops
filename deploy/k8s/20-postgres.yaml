@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: wolf-devsecops
+spec:
+  selector: { app: db }
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None            # headless: StatefulSet
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: wolf-devsecops
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels: { app: db }
+  template:
+    metadata:
+      labels: { app: db }
+    spec:
+      # Este pod no llama a la API de Kubernetes → no montar el token de ServiceAccount
+      # (cierra una vía típica de escalada lateral; hardening estándar).
+      automountServiceAccountToken: false
+      # Pod-level securityContext (KSV118: contexto de seguridad explícito).
+      # postgres:16.4-alpine corre como uid 70 (usuario "postgres"); fsGroup=70
+      # asegura la propiedad del PVC montado en PGDATA. NO usar 10001: rompería
+      # la propiedad del volumen.
+      securityContext:
+        runAsNonRoot: true            # KSV012
+        runAsUser: 70                 # usuario postgres de la imagen alpine
+        runAsGroup: 70
+        fsGroup: 70                   # propiedad del volumen PGDATA
+        seccompProfile:
+          type: RuntimeDefault        # KSV104 / KSV030
+      containers:
+        - name: postgres
+          image: postgres:16.4-alpine
+          securityContext:
+            allowPrivilegeEscalation: false   # KSV001
+            readOnlyRootFilesystem: true      # KSV014 (requiere emptyDir en /tmp y /var/run/postgresql)
+            runAsUser: 70                     # KSV118 (contexto explícito a nivel contenedor)
+            runAsGroup: 70
+            capabilities:
+              drop: ["ALL"]                   # KSV003 / KSV004 / KSV106
+          # WAIVER KSV020 / KSV021 (uid/gid > 10000): la imagen postgres:16.4-alpine
+          # EXIGE uid 70 para ser dueña del PVC (PGDATA). Forzar uid>10000 rompería
+          # el arranque. Riesgo aceptado y documentado; no se fuerza.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: POSTGRES_USER
+              value: wolf
+            - name: POSTGRES_DB
+              value: wolf_devsecops
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: wolf-secrets, key: POSTGRES_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U wolf -d wolf_devsecops"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # emptyDir para los paths escribibles que exige readOnlyRootFilesystem:
+            - name: tmp
+              mountPath: /tmp
+            - name: run
+              mountPath: /var/run/postgresql   # socket unix + lock de postgres
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

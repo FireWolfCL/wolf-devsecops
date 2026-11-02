@@ -1,0 +1,21 @@
+# Ingress: enruta todo al frontend (Nginx), que a su vez proxya /api al backend.
+# Requiere un ingress-controller (p. ej. ingress-nginx). Ajusta `host` a tu DNS.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wolf-devsecops
+  namespace: wolf-devsecops
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+spec:
+  rules:
+    - host: wolf-devsecops.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

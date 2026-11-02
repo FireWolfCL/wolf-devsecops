@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: wolf-devsecops
+spec:
+  selector: { app: backend }
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: wolf-devsecops
+spec:
+  replicas: 1                 # 1 réplica: el entrypoint migra al arrancar (evita carrera)
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      # Este pod no llama a la API de Kubernetes → no montar el token de ServiceAccount
+      # (cierra una vía típica de escalada lateral; hardening estándar).
+      automountServiceAccountToken: false
+      # Pod-level securityContext (KSV118: contexto de seguridad explícito).
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault        # KSV104 / KSV030
+        # La imagen define USER wolf (uid 10001, ver backend/Dockerfile), así que
+        # correr como no-root es seguro y no bloquea el arranque del pod.
+        runAsNonRoot: true            # KSV012
+        runAsUser: 10001              # KSV020
+        runAsGroup: 10001             # KSV021
+        fsGroup: 10001
+      containers:
+        - name: backend
+          image: wolf-devsecops-backend:proto
+          imagePullPolicy: IfNotPresent   # imagen cargada en el cluster local (kind/minikube)
+          securityContext:
+            allowPrivilegeEscalation: false   # KSV001
+            readOnlyRootFilesystem: true      # KSV014 (requiere emptyDir en /tmp)
+            capabilities:
+              drop: ["ALL"]                   # KSV003 / KSV004 / KSV106
+            runAsUser: 10001                  # KSV020
+            runAsGroup: 10001                 # KSV021
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: WOLF_ENVIRONMENT
+              value: "production"
+            - name: DB_HOST
+              value: "db"
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: wolf-secrets, key: POSTGRES_PASSWORD }
+            # $(VAR) se expande con env previos del mismo contenedor.
+            - name: WOLF_DATABASE_URL
+              value: "postgresql+asyncpg://wolf:$(POSTGRES_PASSWORD)@db:5432/wolf_devsecops"
+            - name: WOLF_JWT_SECRET
+              valueFrom:
+                secretKeyRef: { name: wolf-secrets, key: WOLF_JWT_SECRET }
+            - name: WOLF_MFA_FERNET_KEY
+              valueFrom:
+                secretKeyRef: { name: wolf-secrets, key: WOLF_MFA_FERNET_KEY }
+            - name: WOLF_ADMIN_USERNAME
+              value: "admin"
+            - name: WOLF_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: wolf-secrets, key: WOLF_ADMIN_PASSWORD }
+            - name: WOLF_CORS_ORIGINS
+              value: "http://localhost:8088"
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet: { path: /api/health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: 8000 }
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          volumeMounts:
+            # emptyDir escribible que exige readOnlyRootFilesystem (p.ej. .pyc,
+            # archivos temporales). Validar en cluster que la app no escriba fuera de /tmp.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

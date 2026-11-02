@@ -1,0 +1,11 @@
+{
+  "component": {
+    "key": "demo-app",
+    "measures": [
+      { "metric": "bugs", "value": "3" },
+      { "metric": "vulnerabilities", "value": "1" },
+      { "metric": "code_smells", "value": "42" },
+      { "metric": "coverage", "value": "71.4" }
+    ]
+  }
+}

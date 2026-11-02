@@ -1,0 +1,24 @@
+# =============================================================================
+# Wolf DevSecOps — modo CONNECT (ADR-009)
+# -----------------------------------------------------------------------------
+# Solo Wolf DevSecOps; apunta a tu DefectDojo / Sonar EXISTENTES (o solo GitHub).
+# Para el modo ALL-IN-ONE (que además levanta DefectDojo y Sonar), usa
+# docker-compose.full.yml (llega en F7).
+#
+# Los tokens se leen de deploy/.env (ignorado por git). Copia .env.example a .env.
+# =============================================================================
+services:
+  backend:
+    build: ../backend
+    environment:
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_CORS_ORIGINS: ${WOLF_CORS_ORIGINS:-http://localhost:5173}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+  # frontend: llega en F2 (React/Vite).

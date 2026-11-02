@@ -1,0 +1,19 @@
+# =============================================================================
+# .trivyignore — riesgos aceptados y documentados de Wolf DevSecOps (CICD).
+# -----------------------------------------------------------------------------
+# connect-projects.sh pasa este archivo como --ignorefile SOLO al escanear este
+# proyecto (scoped: no afecta a los demás). Cada entrada es un waiver con dueño
+# y justificación, no un silencio. Revisar en cada release.
+# =============================================================================
+
+# ── postgres: uid/gid del StatefulSet (deploy/k8s/20-postgres.yaml) ───────────
+# La imagen oficial postgres:16.4-alpine corre como el usuario "postgres" (uid 70)
+# y EXIGE ser dueña del PVC montado en PGDATA. Forzar runAsUser/runAsGroup > 10000
+# (lo que piden KSV020/KSV021) rompe el arranque: initdb falla por propiedad del
+# directorio de datos. El resto del hardening del pod SÍ está aplicado
+# (runAsNonRoot, drop ALL caps, readOnlyRootFilesystem, seccomp RuntimeDefault,
+# automountServiceAccountToken:false). Riesgo BAJO, aceptado y documentado.
+# Alternativa futura si se quiere cerrar del todo: initContainer que haga chown
+# del volumen a un uid alto, o imagen que soporte uid arbitrario (p.ej. Bitnami).
+AVD-KSV-0020
+AVD-KSV-0021

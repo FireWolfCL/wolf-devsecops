@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+backend/coverage.xml
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Config real y secretos — NUNCA al repo
+config/projects.yaml
+.env
+deploy/.env
+*.pem
+*.key
+
+# Base de datos local (SQLite) — estado de runtime, no fuente (ADR-012)
+*.db
+*.sqlite3
+backend/wolf_devsecops.db
+
+# Harbor: dir de trabajo del instalador (imágenes, data, logs) — no es fuente
+deploy/harbor/harbor/
+
+# Sistema
+.DS_Store

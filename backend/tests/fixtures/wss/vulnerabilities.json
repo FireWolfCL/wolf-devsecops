@@ -1,0 +1,11 @@
+{
+  "product": "Demo App",
+  "total": 7,
+  "by_severity": {
+    "critical": 1,
+    "high": 2,
+    "medium": 3,
+    "low": 1,
+    "info": 0
+  }
+}

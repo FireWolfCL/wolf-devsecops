@@ -1,0 +1,190 @@
+# =============================================================================
+# Wolf DevSecOps — INSTALACIÓN COMPLETA (genera las fuentes desde 0).
+# -----------------------------------------------------------------------------
+# Levanta Wolf DevSecOps + SonarQube + DefectDojo + Trivy (escaneo real). Harbor
+# va en su propio stack por su instalador oficial (ver deploy/harbor/).
+#
+# Flujo:
+#   1) docker compose -f deploy/docker-compose.install.yml up -d --build
+#   2) deploy/provision-sources.sh   (emite tokens, crea proyectos, reinicia backend)
+#   3) http://localhost:8088  →  panel con las fuentes en VERDE
+#
+# Secretos y credenciales: deploy/.env (gitignored). GitHub es SaaS: se conecta
+# a uno existente desde el panel (no se autogenera).
+# =============================================================================
+name: wolf-devsecops
+
+services:
+  # ═══ Wolf DevSecOps ═════════════════════════════════════════════════════════
+  db:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: wolf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wolf}
+      POSTGRES_DB: wolf_devsecops
+    volumes: [wolf_db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wolf -d wolf_devsecops"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build: ../backend
+    environment:
+      WOLF_ENVIRONMENT: production
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      DB_HOST: db
+      DB_PORT: "5432"
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:?falta WOLF_JWT_SECRET en deploy/.env}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:?falta WOLF_MFA_FERNET_KEY en deploy/.env}
+      WOLF_CORS_ORIGINS: ${WOLF_CORS_ORIGINS:-http://localhost:8088}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_AI_ENABLED: ${WOLF_AI_ENABLED:-false}
+      WOLF_ADMIN_USERNAME: ${WOLF_ADMIN_USERNAME:-admin}
+      WOLF_ADMIN_PASSWORD: ${WOLF_ADMIN_PASSWORD:?falta WOLF_ADMIN_PASSWORD en deploy/.env}
+      WOLF_ADMIN_EMAIL: ${WOLF_ADMIN_EMAIL:-}
+      # Tokens de las fuentes (valores en .env; los rellena provision-sources.sh).
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-}
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # para alcanzar Harbor publicado en el host
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ../frontend
+    ports: ["8088:8080"]          # Nginx unprivileged escucha en 8080 dentro del contenedor
+    depends_on: [backend]
+    restart: unless-stopped
+
+  # ═══ SonarQube (SAST / calidad) ═════════════════════════════════════════════
+  sonarqube:
+    image: sonarqube:10.7-community
+    depends_on: [sonar-db]
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:-sonar}
+    ports: ["9000:9000"]
+    volumes: [sonarqube_data:/opt/sonarqube/data, sonarqube_ext:/opt/sonarqube/extensions]
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    restart: unless-stopped
+
+  sonar-db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:-sonar}
+      POSTGRES_DB: sonar
+    volumes: [sonar_db:/var/lib/postgresql/data]
+    restart: unless-stopped
+
+  # ═══ DefectDojo (gestión de hallazgos) ══════════════════════════════════════
+  defectdojo-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: defectdojo
+      POSTGRES_PASSWORD: ${DD_DB_PASSWORD:-defectdojo}
+      POSTGRES_DB: defectdojo
+    volumes: [dd_db:/var/lib/postgresql/data]
+    restart: unless-stopped
+
+  defectdojo-redis:
+    image: redis:7.4-alpine
+    volumes: [dd_redis:/data]
+    restart: unless-stopped
+
+  defectdojo-initializer:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64          # DefectDojo no publica arm64: emulación Rosetta
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-initializer.sh"]
+    depends_on: [defectdojo-db, defectdojo-redis]
+    environment: &dd_env
+      DD_DEBUG: "False"
+      DD_ALLOWED_HOSTS: "*"
+      DD_DATABASE_URL: postgresql://defectdojo:${DD_DB_PASSWORD:-defectdojo}@defectdojo-db:5432/defectdojo
+      DD_CELERY_BROKER_URL: redis://defectdojo-redis:6379/0
+      DD_SECRET_KEY: ${DD_SECRET_KEY:?falta DD_SECRET_KEY en deploy/.env}
+      DD_CREDENTIAL_AES_256_KEY: ${DD_AES_KEY:?falta DD_AES_KEY en deploy/.env}
+      DD_ADMIN_USER: ${DD_ADMIN_USER:-admin}
+      DD_ADMIN_PASSWORD: ${DD_ADMIN_PASSWORD:?falta DD_ADMIN_PASSWORD en deploy/.env}
+
+  defectdojo-uwsgi:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-uwsgi.sh"]
+    depends_on: [defectdojo-initializer]
+    environment: *dd_env
+    # El nginx oficial de DefectDojo busca el upstream con el nombre fijo 'uwsgi'.
+    networks:
+      default:
+        aliases: [uwsgi]
+    restart: unless-stopped
+
+  defectdojo-celeryworker:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-celery-worker.sh"]
+    depends_on: [defectdojo-initializer]
+    environment: *dd_env
+    restart: unless-stopped
+
+  defectdojo-celerybeat:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-celery-beat.sh"]
+    depends_on: [defectdojo-initializer]
+    environment: *dd_env
+    restart: unless-stopped
+
+  defectdojo-nginx:
+    image: defectdojo/defectdojo-nginx:2.40.3
+    platform: linux/amd64
+    depends_on: [defectdojo-uwsgi]
+    environment:
+      NGINX_METRICS_ENABLED: "false"
+    # 8086 en el host: el 8080 suele estar ocupado por otra app. El backend llega
+    # a DefectDojo por la red interna (defectdojo-nginx:8080), no por este puerto.
+    ports: ["8086:8080"]
+    restart: unless-stopped
+
+  # ═══ Trivy (escaneo de contenedor REAL → reporte JSON servido por Nginx) ═════
+  trivy-scan:
+    image: aquasec/trivy:0.56.2
+    volumes:
+      - trivy_reports:/reports
+      - trivy_cache:/root/.cache
+    # Escanea una imagen con CVEs conocidos para que el panel muestre datos reales.
+    command: >-
+      image --quiet --scanners vuln --format json
+      --output /reports/cicd.json python:3.9-slim
+    restart: "no"
+
+  trivy:
+    image: nginx:1.27-alpine
+    volumes:
+      - trivy_reports:/usr/share/nginx/html:ro
+    depends_on:
+      trivy-scan:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  wolf_db:
+  sonarqube_data:
+  sonarqube_ext:
+  sonar_db:
+  dd_db:
+  dd_redis:
+  trivy_reports:
+  trivy_cache:

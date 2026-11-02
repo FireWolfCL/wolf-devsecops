@@ -1,0 +1,43 @@
+# =============================================================================
+# config/projects.yaml — qué proyectos muestra Wolf DevSecOps y de dónde lee
+# -----------------------------------------------------------------------------
+# Copia este archivo a config/projects.yaml y ajústalo. El projects.yaml real
+# NO lleva tokens: los tokens van por variables de entorno (ver deploy/.env),
+# y aquí solo se referencian por nombre de variable.
+#
+# Así cualquier equipo apunta Wolf DevSecOps a SUS proyectos sin tocar código.
+# =============================================================================
+
+# Fuentes de datos disponibles. Cada una se habilita con sus credenciales por
+# entorno; si no defines una fuente, el dashboard simplemente no la muestra.
+sources:
+  github:
+    api_url: "https://api.github.com"
+    token_env: "GITHUB_TOKEN"        # nombre de la env var, no el valor
+  defectdojo:
+    base_url: "http://localhost:8080"
+    token_env: "DEFECTDOJO_TOKEN"
+  sonarqube:
+    base_url: "http://localhost:9000"
+    token_env: "SONAR_TOKEN"
+
+# Proyectos a mostrar en la consola.
+projects:
+  - key: "cicd"
+    name: "CICD"
+    github:
+      repo: "FireWolfCL/wolf-devsecops"
+      ci_workflow: "ci.yml"
+    defectdojo:
+      product: "CICD"
+    sonarqube:
+      project_key: "cicd"
+
+  # Añade los tuyos. Ejemplo de un proyecto que solo usa GitHub + DefectDojo:
+  # - key: "mi-proyecto"
+  #   name: "Mi Proyecto"
+  #   github:
+  #     repo: "mi-org/mi-repo"
+  #     ci_workflow: "ci.yml"
+  #   defectdojo:
+  #     product: "Mi Proyecto"

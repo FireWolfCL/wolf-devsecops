@@ -1,0 +1,114 @@
+# =============================================================================
+# Wolf DevSecOps — modo ALL-IN-ONE (ADR-009, F7)
+# -----------------------------------------------------------------------------
+# Levanta Wolf DevSecOps + SonarQube + DefectDojo (con sus bases) para quien
+# parte de cero. Las URLs internas ya quedan precargadas; el operador solo pega
+# los tokens en deploy/.env tras el primer arranque (ver RELEASING/README).
+#
+# Versiones FIJADAS (ADR-008): deben caer dentro de supported_versions de cada
+# conector (github >=API 2022-11-28, defectdojo >=2.30, sonarqube >=9.9).
+#
+# Nota honesta: el stack de DefectDojo refleja su compose oficial; ante un salto
+# de versión, contrástalo con el release de DefectDojo (tools/defectdojo/README).
+# No verificado en runtime en este entorno (sin Docker).
+# =============================================================================
+services:
+  # ─── Wolf DevSecOps ────────────────────────────────────────────────────────
+  backend:
+    build: ../backend
+    environment:
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_CORS_ORIGINS: ${WOLF_CORS_ORIGINS:-http://localhost:5173}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    ports: ["8000:8000"]
+    depends_on: [sonarqube, defectdojo-nginx]
+    restart: unless-stopped
+
+  # ─── SonarQube ──────────────────────────────────────────────────────────────
+  sonarqube:
+    image: sonarqube:10.7-community
+    depends_on: [sonar-db]
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:-sonar}
+    ports: ["9000:9000"]
+    volumes: [sonarqube_data:/opt/sonarqube/data, sonarqube_ext:/opt/sonarqube/extensions]
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+
+  sonar-db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:-sonar}
+      POSTGRES_DB: sonar
+    volumes: [sonar_db:/var/lib/postgresql/data]
+
+  # ─── DefectDojo (refleja su compose oficial, imágenes fijadas) ───────────────
+  defectdojo-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: defectdojo
+      POSTGRES_PASSWORD: ${DD_DB_PASSWORD:-defectdojo}
+      POSTGRES_DB: defectdojo
+    volumes: [dd_db:/var/lib/postgresql/data]
+
+  defectdojo-redis:
+    image: redis:7.4-alpine
+    volumes: [dd_redis:/data]
+
+  defectdojo-initializer:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64   # arm64: emulación (DefectDojo no publica arm64)
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-initializer.sh"]
+    depends_on: [defectdojo-db, defectdojo-redis]
+    environment: &dd_env
+      DD_DEBUG: "False"
+      DD_ALLOWED_HOSTS: "*"
+      DD_DATABASE_URL: postgresql://defectdojo:${DD_DB_PASSWORD:-defectdojo}@defectdojo-db:5432/defectdojo
+      DD_CELERY_BROKER_URL: redis://defectdojo-redis:6379/0
+      DD_SECRET_KEY: ${DD_SECRET_KEY:-change-me-secret}
+      DD_CREDENTIAL_AES_256_KEY: ${DD_AES_KEY:-change-me-aes-key}
+      DD_ADMIN_USER: ${DD_ADMIN_USER:-admin}
+      DD_ADMIN_PASSWORD: ${DD_ADMIN_PASSWORD:-}
+
+  defectdojo-uwsgi:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64   # arm64: emulación (DefectDojo no publica arm64)
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-uwsgi.sh"]
+    depends_on: [defectdojo-initializer]
+    environment: *dd_env
+
+  defectdojo-celeryworker:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64   # arm64: emulación (DefectDojo no publica arm64)
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-celery-worker.sh"]
+    depends_on: [defectdojo-initializer]
+    environment: *dd_env
+
+  defectdojo-celerybeat:
+    image: defectdojo/defectdojo-django:2.40.3
+    platform: linux/amd64   # arm64: emulación (DefectDojo no publica arm64)
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "--", "/entrypoint-celery-beat.sh"]
+    depends_on: [defectdojo-initializer]
+    environment: *dd_env
+
+  defectdojo-nginx:
+    image: defectdojo/defectdojo-nginx:2.40.3
+    platform: linux/amd64   # arm64: emulación (DefectDojo no publica arm64)
+    depends_on: [defectdojo-uwsgi]
+    environment:
+      NGINX_METRICS_ENABLED: "false"
+    ports: ["8080:8080"]
+
+volumes:
+  sonarqube_data:
+  sonarqube_ext:
+  sonar_db:
+  dd_db:
+  dd_redis:

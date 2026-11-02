@@ -1,0 +1,19 @@
+# =============================================================================
+# Proyectos a conectar en Wolf DevSecOps. Una entrada por línea:
+#   - nombre suelto  -> repo LOCAL bajo ~/<nombre>  (se escanea con `trivy fs`)
+#   - URL git        -> repo REMOTO                 (se escanea con `trivy repo`)
+# Para AGREGAR cualquiera:  bash deploy/connect-projects.sh <nombre-o-URL>
+# (se agrega aquí y se re-escanea todo). Regenera config/projects.yaml.
+#
+# NOTA: esto es un EJEMPLO. Edítalo con tus propios proyectos. Los repos locales
+# que no existan en ~ simplemente se omiten.
+# =============================================================================
+
+# ── Dogfooding: el propio panel se escanea a sí mismo (repo local) ───────────
+CICD
+
+# ── Ejemplos remotos públicos (IaC/código curado de lsst-it) ─────────────────
+https://github.com/lsst-it/lsst-control
+https://github.com/lsst-it/puppet-daq
+https://github.com/lsst-it/k8s-cookbook
+https://github.com/lsst-it/cnpg-backup

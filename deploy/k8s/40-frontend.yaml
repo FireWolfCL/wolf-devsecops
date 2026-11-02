@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: wolf-devsecops
+spec:
+  selector: { app: frontend }
+  ports:
+    - port: 80
+      targetPort: 8080   # Nginx unprivileged escucha en 8080 (uid no-root), no en 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: wolf-devsecops
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      # Este pod no llama a la API de Kubernetes → no montar el token de ServiceAccount
+      # (cierra una vía típica de escalada lateral; hardening estándar).
+      automountServiceAccountToken: false
+      # Pod-level securityContext (KSV118). La imagen Nginx unprivileged soporta
+      # uid arbitrario (dirs escribibles por cualquier uid), por lo que fijamos
+      # uid/gid 10001 (>10000) y cerramos KSV020/KSV021.
+      securityContext:
+        runAsNonRoot: true            # KSV012
+        runAsUser: 10001              # KSV020
+        runAsGroup: 10001             # KSV021
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault        # KSV104 / KSV030
+      containers:
+        - name: frontend
+          image: wolf-devsecops-frontend:proto
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false   # KSV001
+            readOnlyRootFilesystem: true      # KSV014 (requiere emptyDir en /tmp, /var/cache/nginx, /var/run)
+            runAsUser: 10001                  # KSV118 (contexto explícito a nivel contenedor)
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]                   # KSV003 / KSV004 / KSV106
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          ports:
+            # KSV117: 8080 NO es puerto privilegiado (<1024), se cierra el hallazgo.
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            # Paths escribibles que exige readOnlyRootFilesystem en Nginx unprivileged:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
