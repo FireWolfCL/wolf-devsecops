@@ -33,7 +33,7 @@ def _slug(project_key: str, refs: list[str]) -> str:
     """Slug corto y DETERMINISTA del conjunto de findings: misma selección → mismo
     branch (base de la idempotencia). sha1 solo como identificador, no es seguridad."""
     seed = "|".join([project_key, *sorted(refs)])
-    return hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8]  # noqa: S324
+    return hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]  # noqa: S324
 
 
 def _proposal_markdown(

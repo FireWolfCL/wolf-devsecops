@@ -20,11 +20,11 @@ dependencies = [
     "alembic>=1.14.0",
     "aiosqlite>=0.20.0",
     # Primitivas de auth (A1, ADR-013): argon2id (passlib + argon2-cffi), JWT de
-    # sesión (python-jose), TOTP (pyotp), cifrado del secreto MFA en reposo
+    # sesión (PyJWT), TOTP (pyotp), cifrado del secreto MFA en reposo
     # (cryptography/Fernet) y QR SVG del enrolamiento MFA (qrcode, sin PIL).
     "passlib[argon2]>=1.7.4",
     "argon2-cffi>=23.1.0",
-    "python-jose[cryptography]>=3.3.0",
+    "PyJWT>=2.10.0",
     "pyotp>=2.9.0",
     "qrcode>=7.4.2",
     "cryptography>=43.0.0",
@@ -37,7 +37,7 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
-    "ruff>=0.8.0",
+    "ruff==0.17.3",
 ]
 # Motor Postgres opcional (ADR-012): activar con
 # WOLF_DATABASE_URL=postgresql+asyncpg://...  (por defecto se usa SQLite).
@@ -62,7 +62,8 @@ select = ["E", "W", "F", "I", "B", "UP", "S"]
 # B008: `Depends()`/`Query()` en defaults es EL patrón idiomático de FastAPI.
 # UP042: `(str, Enum)` es intencional (serialización JSON estable, no StrEnum).
 # UP046: `Generic[T]` tipado explícito en SourceResult es deliberado.
-ignore = ["S101", "B008", "UP042", "UP046"]
+# E501: el largo de línea lo gobierna el formateador; no se lintea (recomendación Ruff).
+ignore = ["S101", "B008", "UP042", "UP046", "E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # En tests toleramos líneas largas (asserts) y usos típicos de fixtures.

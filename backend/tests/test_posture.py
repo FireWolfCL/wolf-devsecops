@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from wolf_devsecops.core.posture import PostureConfig, score_global, score_project
 from wolf_devsecops.models import (
     CIStatus,
@@ -108,7 +110,7 @@ def test_findings_exceso_app_si_penaliza():
 def test_quality_warn_es_parcial():
     p = score_project(_summary(quality=_ok(QualitySummary(quality_gate="WARN"))))
     gate = next(c for c in p.checks if c.id == "quality-gate")
-    assert gate.result == "partial" and gate.earned == 5.0  # 0.5 * 10
+    assert gate.result == "partial" and gate.earned == pytest.approx(5.0)  # 0.5 * 10
 
 
 def test_unavailable_vs_not_configured_mismo_score_distinta_marca():

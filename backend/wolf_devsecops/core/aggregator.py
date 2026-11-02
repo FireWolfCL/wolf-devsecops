@@ -25,7 +25,6 @@ from ..models import (
     DependencyItem,
     FindingsSummary,
     GlobalPosture,
-    ModuleTree,
     PostureOverview,
     ProjectListItem,
     ProjectSummary,
@@ -37,11 +36,11 @@ from ..models import (
     ToolDashboard,
     ToolRow,
 )
-from .posture import score_global, score_project
 from ..settings import get_settings
 from .cache import TTLCache
 from .config import AppConfig, ProjectConfig
 from .credentials import resolve_token
+from .posture import score_global, score_project
 
 _NEGATIVE_TTL_SECONDS = 10  # cuánto se recuerda un fallo de fuente
 

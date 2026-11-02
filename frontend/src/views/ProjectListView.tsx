@@ -64,8 +64,8 @@ function Hero({
   const attention = useMemo(() => {
     const seen = new Set<string>();
     const out: { key: string; band: "critico" | "en_riesgo" }[] = [];
-    for (const k of posture.critical) if (!seen.has(k)) (seen.add(k), out.push({ key: k, band: "critico" }));
-    for (const k of posture.at_risk) if (!seen.has(k)) (seen.add(k), out.push({ key: k, band: "en_riesgo" }));
+    for (const k of posture.critical) if (!seen.has(k)) { seen.add(k); out.push({ key: k, band: "critico" }); }
+    for (const k of posture.at_risk) if (!seen.has(k)) { seen.add(k); out.push({ key: k, band: "en_riesgo" }); }
     return out;
   }, [posture.critical, posture.at_risk]);
   const shownAttn = attention.slice(0, 6);

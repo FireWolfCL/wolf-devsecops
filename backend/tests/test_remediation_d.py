@@ -15,6 +15,8 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from wolf_devsecops.api.deps import get_config
+from wolf_devsecops.auth import security
 from wolf_devsecops.connectors.github import GitHubWriteClient, GitHubWriteError
 from wolf_devsecops.core.config import (
     AppConfig,
@@ -29,11 +31,8 @@ from wolf_devsecops.models import RemediationFinding
 from wolf_devsecops.models_db.audit import AuditLog
 from wolf_devsecops.models_db.user import User
 from wolf_devsecops.rbac.roles import Role
-from wolf_devsecops.services import remediation_service
+from wolf_devsecops.services import config_service, remediation_service
 from wolf_devsecops.services.remediation_service import RemediationError, _slug
-from wolf_devsecops.auth import security
-from wolf_devsecops.api.deps import get_config
-from wolf_devsecops.services import config_service
 from wolf_devsecops.settings import get_settings
 
 

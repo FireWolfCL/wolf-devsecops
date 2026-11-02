@@ -45,4 +45,4 @@ async def test_sonarqube_gate_y_metricas():
     assert q.bugs == 3
     assert q.vulnerabilities == 1
     assert q.code_smells == 42
-    assert q.coverage == 71.4
+    assert q.coverage == pytest.approx(71.4)

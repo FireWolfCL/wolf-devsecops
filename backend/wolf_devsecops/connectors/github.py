@@ -13,7 +13,15 @@ from datetime import UTC, datetime
 import httpx
 
 from ..core.config import ProjectConfig
-from ..models import CIStatus, CISummary, ModuleNode, ModuleTree, ProbeResult, ReleaseSummary, SourceDetail
+from ..models import (
+    CIStatus,
+    CISummary,
+    ModuleNode,
+    ModuleTree,
+    ProbeResult,
+    ReleaseSummary,
+    SourceDetail,
+)
 from .base import Connector, ConnectorUnavailable
 
 _API_VERSION = "2022-11-28"

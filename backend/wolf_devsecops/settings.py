@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     # contents:write, pull_requests:write). SEPARADO del token de lectura de la
     # fuente github (ADR-002, ADR-017). El valor vive SOLO en el entorno; jamás se
     # devuelve, loguea ni audita. WOLF_GITHUB_WRITE_TOKEN_ENV.
-    github_write_token_env: str = "GITHUB_WRITE_TOKEN"
+    github_write_token_env: str = "GITHUB_WRITE_TOKEN"  # noqa: S105 (nombre de env var, no secreto)
 
     # --- Primitivas de auth (A1, ADR-013) ----------------------------------
     # Secretos criptográficos: viven SOLO en el entorno (WOLF_JWT_SECRET,

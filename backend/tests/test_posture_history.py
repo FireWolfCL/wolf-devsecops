@@ -15,7 +15,13 @@ from wolf_devsecops.db import engine as db_engine
 from wolf_devsecops.db.base import Base
 from wolf_devsecops.main import create_app
 from wolf_devsecops.models import (
-    CIStatus, CISummary, FindingsSummary, ProjectSummary, SeverityCount, SourceResult, SourceStatus,
+    CIStatus,
+    CISummary,
+    FindingsSummary,
+    ProjectSummary,
+    SeverityCount,
+    SourceResult,
+    SourceStatus,
 )
 from wolf_devsecops.models_db.posture import PostureSnapshot
 from wolf_devsecops.models_db.user import User

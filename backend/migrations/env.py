@@ -12,11 +12,10 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from wolf_devsecops.db.base import Base
-from wolf_devsecops.settings import get_settings
-
 # Importa el paquete de modelos para registrar todas las tablas en Base.metadata.
 import wolf_devsecops.models_db  # noqa: F401
+from wolf_devsecops.db.base import Base
+from wolf_devsecops.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:

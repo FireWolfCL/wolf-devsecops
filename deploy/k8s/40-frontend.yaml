@@ -53,6 +53,7 @@ spec:
             limits:
               cpu: "250m"
               memory: "128Mi"
+              ephemeral-storage: "512Mi"
           ports:
             # KSV117: 8080 NO es puerto privilegiado (<1024), se cierra el hallazgo.
             - containerPort: 8080

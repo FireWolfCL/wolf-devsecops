@@ -6,7 +6,12 @@ title = "gitleaks — Wolf DevSecOps"
 useDefault = true
 
 [allowlist]
-description = "Fixtures de test: contraseñas de PRUEBA (p. ej. 'enrol-pass-123'), no secretos reales."
+description = "Fixtures de test, placeholders de ejemplo y credenciales default de bootstrap: no son secretos reales."
 paths = [
-  '''backend/tests/.*''',
+  '''backend/tests/.*''',          # contraseñas de PRUEBA en fixtures (p. ej. 'enrol-pass-123')
+  '''.*\.example\.ya?ml''',        # manifiestos de ejemplo con placeholders (CAMBIAME-...)
+]
+regexes = [
+  '''CAMBIAME''',                  # placeholder explícito en archivos .example
+  '''admin:admin''',               # credencial DEFAULT de bootstrap (Harbor recién instalado; se cambia en el setup)
 ]

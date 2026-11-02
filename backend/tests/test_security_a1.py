@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import time
 
+import jwt
 import pyotp
 import pytest
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 
 from wolf_devsecops.auth import security
 from wolf_devsecops.rbac.roles import Role

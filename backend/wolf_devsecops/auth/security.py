@@ -28,11 +28,12 @@ import io
 import secrets
 import time
 
+import jwt
 import pyotp
 import qrcode
 import qrcode.image.svg
 from cryptography.fernet import Fernet, InvalidToken
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 from passlib.context import CryptContext
 
 from ..rbac.roles import Role
