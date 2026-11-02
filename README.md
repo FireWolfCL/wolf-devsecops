@@ -6,6 +6,8 @@
 
 *Community Edition · by Wolf Industries · Apache-2.0*
 
+**Español** · [English](README.en.md)
+
 </div>
 
 ---
@@ -18,6 +20,19 @@ sin reemplazarlas ni volver a escanear. Un *single pane of glass*.
 No está atada a ningún proyecto: apuntas Wolf DevSecOps a **tus** repos y **tus**
 fuentes mediante un archivo de configuración, y listo. Pensada para que cualquier
 equipo la integre en su propio pipeline con un `docker compose up`.
+
+## Instalación rápida / Quick install
+
+**ES:** Un solo comando asistido levanta toda la suite (panel + SonarQube +
+DefectDojo + Trivy). **EN:** One assisted command brings up the whole suite.
+
+```bash
+git clone https://github.com/FireWolfCL/wolf-devsecops.git
+cd wolf-devsecops
+bash deploy/install.sh          # Windows: pwsh deploy/install.ps1
+```
+
+→ Guía completa (ES + EN): **[INSTALL.md](INSTALL.md)** · Kubernetes: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
 
 ## ¿Qué muestra?
 

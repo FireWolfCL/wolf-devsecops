@@ -1,5 +1,7 @@
 # Despliegue — Wolf DevSecOps
 
+**Español** · [English](DEPLOY.en.md)
+
 Dos caminos. Ambos levantan **el producto completo de 0**: Postgres + backend
 (migrado y con el primer admin) + frontend. Las fuentes (GitHub, DefectDojo,
 SonarQube, Harbor, Trivy, WSS) se conectan **desde el panel** `/admin/integraciones`.
