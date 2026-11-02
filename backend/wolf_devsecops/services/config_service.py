@@ -445,9 +445,11 @@ async def upsert_project(
 
     row = await session.get(ProjectRow, key)
     if row is None:
-        session.add(ProjectRow(key=key, name=name, enabled=enabled))
+        session.add(ProjectRow(key=key, name=name, enabled=enabled, **({"org": org} if org else {})))
     else:
         row.name, row.enabled = name, enabled
+        if org:
+            row.org = org
         await session.execute(delete(ProjectSourceRow).where(ProjectSourceRow.project_key == key))
     await session.flush()
     for source, settings in clean.items():

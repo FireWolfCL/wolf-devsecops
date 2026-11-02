@@ -15,8 +15,11 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import typer
+from sqlalchemy import select
 
+from ..core.credentials import resolve_token
 from ..db.engine import dispose_engine, get_sessionmaker
+from ..models_db.config import SourceConfigRow
 from ..services import config_service
 
 
@@ -68,16 +71,24 @@ def import_org(
     dry_run: bool = typer.Option(False, "--dry-run", help="Solo cuenta; no escribe."),
 ) -> None:
     """Agrega como proyectos los repos ACTIVOS de una organización GitHub."""
-    token = os.environ.get("GITHUB_TOKEN", "")
     cutoff = datetime.now(UTC) - timedelta(days=active_days)
 
-    async def _run() -> tuple[int, int, int]:
-        repos = await _list_repos(org, cutoff, token)
-        if limit:
-            repos = repos[:limit]
-        added = skipped = 0
+    async def _run() -> tuple[int, int, int, bool]:
         try:
             async with get_sessionmaker()() as session:
+                # Token de la fuente github: BD cifrada > env (igual que el panel).
+                gh = (
+                    await session.execute(
+                        select(SourceConfigRow).where(SourceConfigRow.name == "github")
+                    )
+                ).scalar_one_or_none()
+                token = (
+                    resolve_token(gh.token_env, gh.token_cipher) if gh else None
+                ) or os.environ.get("GITHUB_TOKEN", "")
+                repos = await _list_repos(org, cutoff, token)
+                if limit:
+                    repos = repos[:limit]
+                added = skipped = 0
                 for repo in repos:
                     key = _slug(repo["name"])
                     if await config_service.project_exists(session, key):
@@ -96,16 +107,16 @@ def import_org(
                     added += 1
         finally:
             await dispose_engine()
-        return len(repos), added, skipped
+        return len(repos), added, skipped, bool(token)
 
     try:
-        total, added, skipped = asyncio.run(_run())
+        total, added, skipped, authed = asyncio.run(_run())
     except Exception as exc:  # noqa: BLE001
         typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
     verb = "se agregarían" if dry_run else "agregados"
-    auth = "autenticado" if token else "SIN token (rate limit 60/h; pon GITHUB_TOKEN)"
+    auth = "autenticado" if authed else "SIN token (rate limit 60/h; configura el token de github)"
     typer.secho(
         f"{org}: {total} repos activos (<{active_days}d) · {verb}: {added} · ya existían: {skipped}. [{auth}]",
         fg=typer.colors.GREEN,
