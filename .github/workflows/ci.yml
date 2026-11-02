@@ -1,0 +1,186 @@
+# =============================================================================
+# CI / Release — Wolf DevSecOps
+# -----------------------------------------------------------------------------
+# Gates obligatorios (estándar de la casa wolf-release-devsecops): lint+tests,
+# SAST, escaneo de dependencias, escaneo de secretos, SBOM, reversibilidad de
+# migraciones y, SOLO en tags vX.Y.Z, build + (firma TODO) + release.
+#
+# Seguridad del pipeline:
+#   - Token de mínimo privilegio: contents:read arriba; se eleva por job.
+#   - Toda acción y herramienta va PINEADA a una versión exacta (sin @latest/@main).
+#   - Ningún secreto embebido: todo va por el almacén de secretos del repo.
+# Las versiones pineadas deben revisarse/renovarse periódicamente (Dependabot/Renovate).
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Gate: lint + tests (backend ruff+pytest, frontend typecheck+build) ───────
+  lint-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Instalar backend (editable + dev)
+        working-directory: backend
+        run: python -m pip install -e ".[dev,postgres]"
+      - name: Ruff (lint + reglas de seguridad S)
+        working-directory: backend
+        run: ruff check .
+      - name: Pytest (SQLite, async)
+        working-directory: backend
+        run: python -m pytest -q
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend — ci + typecheck + build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+  # ── Gate: SAST (análisis estático de código) ─────────────────────────────────
+  # Python: Bandit. (Ruff ya aplica el set de seguridad `S` en lint-tests.)
+  # JS/TS: pendiente — añadir semgrep o eslint-plugin-security (ver RELEASING.md).
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Bandit (solo severidad media+)
+        run: |
+          python -m pip install bandit==1.8.0
+          bandit -r backend/wolf_devsecops -ll
+
+  # ── Gate: escaneo de dependencias (por ecosistema, contra el lockfile) ───────
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+      - name: pip-audit (dependencias Python)
+        run: |
+          python -m pip install pip-audit==2.7.3
+          python -m pip install -e "./backend[postgres]"
+          pip-audit
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "20"
+      - name: npm audit (dependencias frontend, high+)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  # ── Gate: escaneo de secretos (historial completo en release; diff en PR) ────
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Config con allowlist de fixtures de test en .gitleaks.toml
+
+  # ── Gate: SBOM (CycloneDX) como artefacto del run ────────────────────────────
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Generar SBOM (syft)
+        uses: anchore/sbom-action@v0.17.8
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+      - uses: actions/upload-artifact@v4.4.3
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+
+  # ── Gate: reversibilidad de migraciones (Alembic up → down → up, SQLite) ─────
+  migration-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Instalar backend
+        working-directory: backend
+        run: python -m pip install -e ".[dev]"
+      - name: Alembic upgrade → downgrade → upgrade (falla si no es reversible)
+        working-directory: backend
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+  # ── Release gate: SOLO en tags vX.Y.Z; depende de TODOS los gates ────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint-tests, sast, dependency-scan, secret-scan, sbom, migration-check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # único job que puede crear el release/tag
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Build del wheel del backend
+        run: |
+          python -m pip install build==1.2.2
+          python -m build ./backend --outdir dist
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build del frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          tar -czf ../dist/frontend-dist.tgz -C dist .
+      - name: Regenerar SBOM del release
+        uses: anchore/sbom-action@v0.17.8
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/sbom.cyclonedx.json
+      # - name: Firmar artefactos (cosign)  # TODO: habilitar cuando haya llave
+      #   env:
+      #     COSIGN_KEY: ${{ secrets.COSIGN_KEY }}   # <SIGNING_KEY — del secret store>
+      #   run: |
+      #     cosign sign-blob --yes --key env://COSIGN_KEY dist/*.whl > dist/backend.whl.sig
+      - name: Publicar release con artefactos + SBOM
+        uses: softprops/action-gh-release@v2.0.8
+        with:
+          files: |
+            dist/*.whl
+            dist/frontend-dist.tgz
+            dist/sbom.cyclonedx.json
+          generate_release_notes: true

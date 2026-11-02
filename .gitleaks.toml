@@ -1,0 +1,12 @@
+# Config de gitleaks para el gate `secret-scan` del CI.
+# Extiende las reglas por defecto y añade una allowlist acotada.
+title = "gitleaks — Wolf DevSecOps"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures de test: contraseñas de PRUEBA (p. ej. 'enrol-pass-123'), no secretos reales."
+paths = [
+  '''backend/tests/.*''',
+]
