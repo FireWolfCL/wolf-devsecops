@@ -18,6 +18,7 @@ import { CodeMapView } from "./views/CodeMapView";
 import { DependencyInventoryView } from "./views/DependencyInventoryView";
 import { PostureHistoryView } from "./views/PostureHistoryView";
 import { ReportView } from "./views/ReportView";
+import { ActivityView } from "./views/ActivityView";
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -79,6 +80,7 @@ export function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="tools" element={<Herramientas />} />
+        <Route path="activity" element={<ActivityView />} />
         <Route path="projects/:key" element={<ProjectDetailRoute />} />
         <Route path="projects/:key/report" element={<ReportRoute />} />
         <Route path="projects/:key/deps" element={<DepsRoute />} />

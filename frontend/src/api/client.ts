@@ -6,6 +6,9 @@ import type {
   AIProviderKind,
   AIReviewResult,
   DependencyInventory,
+  EventList,
+  EventReport,
+  UnreadCount,
   ModuleTree,
   PostureHistory,
   PostureOverview,
@@ -113,4 +116,18 @@ export function createRemediationBranch(
     `/api/v1/projects/${encodeURIComponent(key)}/remediation/branch`,
     { method: "POST", json: { picked_findings: picked, confirm: true } },
   );
+}
+
+// ─── Notificaciones (campana + reporte) ─────────────────────────────────────
+export function fetchEvents(limit = 50): Promise<EventList> {
+  return request<EventList>(`/api/v1/events?limit=${limit}`);
+}
+export function fetchUnreadCount(): Promise<UnreadCount> {
+  return request<UnreadCount>("/api/v1/events/unread_count");
+}
+export function markEventsRead(): Promise<void> {
+  return request<void>("/api/v1/events/read", { method: "POST" });
+}
+export function fetchEventReport(days = 30): Promise<EventReport> {
+  return request<EventReport>(`/api/v1/events/report?days=${days}`);
 }

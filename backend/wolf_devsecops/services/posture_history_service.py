@@ -16,6 +16,7 @@ from ..core.config import AppConfig
 from ..core.posture import score_project
 from ..models import ProjectSummary
 from ..models_db.posture import PostureSnapshot as PostureSnapshotRow
+from . import event_service
 
 MAX_LIMIT = 1000
 
@@ -70,7 +71,11 @@ async def capture_snapshots(
         if row is None:
             skipped.append(project.key)
             continue
+        # Antes de añadir el punto nuevo, trae el anterior y detecta los cambios.
+        prev = await event_service.latest_before(session, project.key)
         session.add(row)
+        for ev in event_service.detect(prev, row):
+            session.add(ev)
         written += 1
     await session.commit()
     return written, skipped

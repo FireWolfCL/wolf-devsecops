@@ -14,13 +14,16 @@ from .config import (
     SourceConfigRow,
     SystemConfigRow,
 )
+from .events import EventRead, ProjectEvent
 from .posture import PostureSnapshot
 from .user import User
 
 __all__ = [
     "AuditLog",
     "AISettingsRow",
+    "EventRead",
     "PostureSnapshot",
+    "ProjectEvent",
     "ProjectRow",
     "ProjectSourceRow",
     "SourceConfigRow",

@@ -492,3 +492,38 @@ export interface RemediationBranchResult {
   applied: boolean;
   already_existed: boolean;
 }
+
+// ─── Notificaciones (campana + reporte de avance) ───────────────────────────
+export interface EventItem {
+  id: string;
+  created_at: string;
+  project_key: string;
+  kind: string; // improved|worsened|new_critical|resolved_critical|new_high|resolved_high
+  severity: string; // good|warn|danger|info
+  band_from: string | null;
+  band_to: string | null;
+  compliance_from: number | null;
+  compliance_to: number | null;
+  crit_delta: number;
+  high_delta: number;
+}
+export interface EventList {
+  events: EventItem[];
+  unread: number;
+}
+export interface UnreadCount {
+  count: number;
+}
+export interface EventReportRow {
+  project_key: string;
+  improved: number;
+  worsened: number;
+  new_critical: number;
+  resolved_critical: number;
+}
+export interface EventReport {
+  since: string;
+  days: number;
+  totals: Record<string, number>;
+  by_project: EventReportRow[];
+}

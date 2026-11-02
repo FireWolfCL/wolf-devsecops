@@ -6,6 +6,9 @@ import { useAuth } from "../auth/AuthContext";
 import { useAsync } from "../hooks";
 import { useI18n } from "../i18n";
 import { LANGS, LANG_NAMES, type Lang } from "../i18n/translations";
+import { WolfGuide } from "./WolfGuide";
+import { NotificationBell } from "./NotificationBell";
+import { FireWolfEasterEgg } from "../wolf-ux/FireWolfEasterEgg";
 
 function LangSwitcher() {
   const { lang, setLang, t } = useI18n();
@@ -32,7 +35,7 @@ function VersionBadge() {
 
 export function Layout() {
   const { user, logout } = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const isAdmin = user?.role === "admin";
   const { pathname } = useLocation();
   // Ocultar lo que el rol no puede ver es ergonomía; el servidor decide.
@@ -51,10 +54,12 @@ export function Layout() {
         <nav className="app-nav" aria-label={t("layout.mainNav")}>
           <NavLink to="/" end>{t("nav.projects")}</NavLink>
           <NavLink to="/tools">{t("nav.tools")}</NavLink>
+          <NavLink to="/activity">{lang === "en" ? "What's new" : "Novedades"}</NavLink>
           {isAdmin && <NavLink to="/admin">{t("nav.admin")}</NavLink>}
         </nav>
         {user && (
           <div className="header-user">
+            <NotificationBell />
             <LangSwitcher />
             <VersionBadge />
             <NavLink to="/profile" className="mono">{user.username}</NavLink>
@@ -69,6 +74,13 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+      {/* Guía interactiva (lobo cibernético) + firma Fire_Wolf (Konami). */}
+      <WolfGuide />
+      <FireWolfEasterEgg
+        developer="Fire_Wolf.cl"
+        frames={["/wolf/Lobo-1.png", "/wolf/Lobo-2.png", "/wolf/Lobo-3.png", "/wolf/Lobo-4.png"]}
+        howlSrc="/wolf/lobo.mp3"
+      />
     </>
   );
 }

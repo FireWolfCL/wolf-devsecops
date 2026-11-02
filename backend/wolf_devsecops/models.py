@@ -387,3 +387,44 @@ class PostureSnapshot(BaseModel):
 class PostureHistory(BaseModel):
     project_key: str
     snapshots: list[PostureSnapshot] = []  # orden ascendente por captured_at
+
+
+# ─── Notificaciones (campana + reporte de avance) ────────────────────────────
+
+
+class EventItem(BaseModel):
+    id: str
+    created_at: datetime
+    project_key: str
+    kind: str  # improved|worsened|new_critical|resolved_critical|new_high|resolved_high
+    severity: str  # good|warn|danger|info
+    band_from: str | None = None
+    band_to: str | None = None
+    compliance_from: float | None = None
+    compliance_to: float | None = None
+    crit_delta: int = 0
+    high_delta: int = 0
+
+
+class EventList(BaseModel):
+    events: list[EventItem] = []
+    unread: int = 0
+
+
+class UnreadCount(BaseModel):
+    count: int = 0
+
+
+class EventReportRow(BaseModel):
+    project_key: str
+    improved: int = 0
+    worsened: int = 0
+    new_critical: int = 0
+    resolved_critical: int = 0
+
+
+class EventReport(BaseModel):
+    since: datetime
+    days: int
+    totals: dict[str, int] = {}
+    by_project: list[EventReportRow] = []

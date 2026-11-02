@@ -19,6 +19,7 @@ from .api import (
     routes_auth,
     routes_codemap,
     routes_dependencies,
+    routes_events,
     routes_health,
     routes_history,
     routes_projects,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_settings.router)
     app.include_router(routes_projects.router)
     app.include_router(routes_history.router)
+    app.include_router(routes_events.router)
     app.include_router(routes_report.router)
     app.include_router(routes_dependencies.router)
     app.include_router(routes_codemap.router)
