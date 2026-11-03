@@ -14,8 +14,10 @@
 
 Wolf DevSecOps es una **consola agregadora** open-source: reúne en un único
 dashboard el estado de seguridad y calidad de tus proyectos, leyendo lo que ya
-producen tus herramientas —**GitHub Actions**, **DefectDojo**, **SonarQube**—
-sin reemplazarlas ni volver a escanear. Un *single pane of glass*.
+producen tus herramientas —**GitHub Actions**, **SonarQube**, **DefectDojo**,
+**Trivy** y **Harbor**— sin reemplazarlas. El panel nunca escanea por su cuenta
+(ADR-001); el instalador todo-en-uno sí puede correr **Trivy** como conveniencia
+para darte un primer puntaje el día uno. Un *single pane of glass*.
 
 No está atada a ningún proyecto: apuntas Wolf DevSecOps a **tus** repos y **tus**
 fuentes mediante un archivo de configuración, y listo. Pensada para que cualquier
@@ -41,6 +43,7 @@ Por cada proyecto que configures:
 - **Estado de CI** — ¿pasaron los gates del último run? (GitHub Actions)
 - **Vulnerabilidades** — CVEs de dependencias, SAST, config, secretos (DefectDojo)
 - **Calidad** — bugs, code smells, cobertura (SonarQube)
+- **Contenedores** — CVEs de las imágenes que vas a desplegar (Trivy / Harbor)
 - **Releases** — última versión publicada y su SBOM
 - **Remediación** — PRs abiertos que proponen arreglos
 
@@ -48,20 +51,25 @@ Por cada proyecto que configures:
 
 ```
   Navegador                Backend (FastAPI)              Fuentes
- ┌──────────┐   /api/*    ┌───────────────────┐  tokens  ┌──────────────┐
- │ Dashboard │ ─────────▶ │ proxy + conectores │ ───────▶ │ GitHub API    │
- │ (React)   │ ◀───────── │ normaliza + cachea │ ◀─────── │ DefectDojo API│
- └──────────┘   JSON      └───────────────────┘          │ SonarQube API │
-                           ▲ config/projects.yaml         └──────────────┘
+ ┌──────────┐   /api/*    ┌───────────────────┐  tokens  ┌───────────────┐
+ │ Dashboard │ ─────────▶ │ proxy + conectores │ ───────▶ │ GitHub API     │
+ │ (React)   │ ◀───────── │ normaliza + cachea │ ◀─────── │ SonarQube API  │
+ └──────────┘   JSON      └───────────────────┘          │ DefectDojo API │
+                           ▲ config/projects.yaml         │ Trivy · Harbor │
+                                                          │ WSS (opcional) │
+                                                          └───────────────┘
 ```
 
 El backend es necesario para que los **tokens vivan en el servidor**, nunca en
-el navegador. Normaliza las tres fuentes a un formato común y cachea.
+el navegador. Normaliza las fuentes a un formato común y cachea.
 
 ## Estado
 
-🚧 **En construcción (MVP).** La arquitectura la está definiendo el equipo antes
-de la implementación. Ver `docs/`.
+**Community funcional.** Backend (FastAPI) + frontend (React) operativos;
+conectores para GitHub, SonarQube, DefectDojo, Trivy y Harbor, más WSS opcional;
+instalador asistido (`deploy/install.sh`) y rúbrica de postura
+(`docs/POSTURE-RUBRIC.md`). Las ediciones Pro/Enterprise están en desarrollo.
+Decisiones de diseño y arquitectura en `docs/`.
 
 ## Stack
 
