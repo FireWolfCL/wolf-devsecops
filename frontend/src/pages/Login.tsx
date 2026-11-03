@@ -4,13 +4,21 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import wolfHead from "../assets/wolf-head.svg";
 import { useAuth } from "../auth/AuthContext";
-import { errText } from "../components/util";
+import { ExtLink, errText } from "../components/util";
+import { useAsync, useMeta } from "../hooks";
+import { updatesApi } from "../api/admin";
 import { useT } from "../i18n";
+
+const EDITION_LABEL: Record<string, string> = { community: "Community", pro: "Pro", enterprise: "Enterprise" };
 
 export function Login() {
   const { user, loading, awaitingMfa, login, completeMfaLogin, cancelMfa } = useAuth();
   const t = useT();
+  const { data: meta } = useMeta();
+  const { data: ver } = useAsync(() => updatesApi.version(), []);
+  const edition = EDITION_LABEL[meta?.edition ?? "community"] ?? "Community";
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
@@ -57,9 +65,19 @@ export function Login() {
 
   return (
     <div className="auth-box">
-      <h1 style={{ marginBottom: 4 }}>Wolf DevSecOps</h1>
-      <p className="muted" style={{ marginTop: 0 }}>{t("login.subtitle")}</p>
-      <div className="card">
+      <div className="auth-brand">
+        <span
+          className="auth-mark"
+          role="img"
+          aria-label="Wolf Industries"
+          style={{ maskImage: `url(${wolfHead})`, WebkitMaskImage: `url(${wolfHead})` }}
+        />
+        <h1 className="auth-title">
+          Wolf DevSecOps <span className="auth-edition">{edition}</span>
+        </h1>
+        <p className="auth-tagline">{t("login.subtitle")}</p>
+      </div>
+      <div className="card auth-card">
         {!awaitingMfa ? (
           <form onSubmit={submitCreds}>
             <div className="field">
@@ -97,6 +115,11 @@ export function Login() {
           </form>
         )}
       </div>
+      <footer className="auth-foot">
+        <span className="muted">© Wolf Industries</span>
+        <ExtLink href="https://wolf-industries.tech" className="ext-link sm">wolf-industries.tech</ExtLink>
+        {ver && <span className="muted mono">v{ver.current_version}</span>}
+      </footer>
     </div>
   );
 }

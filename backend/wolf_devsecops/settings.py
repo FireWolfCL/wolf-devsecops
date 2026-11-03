@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # exige secretos fuertes (JWT/Fernet) y gatea el backup de migraciones.
     environment: str = "development"
 
+    # Edición del producto: "community" (default) | "pro" | "enterprise". Fase 1
+    # (edition-flag): se fija por entorno. Fase 2: la determinará una licencia
+    # firmada por la WLA. Un valor inválido degrada a community (ver edition.py).
+    edition: str = "community"
+
     # Ruta al archivo de proyectos/fuentes (semilla de bootstrap YAML→BD, ADR-015).
     config_path: str = "config/projects.yaml"
 

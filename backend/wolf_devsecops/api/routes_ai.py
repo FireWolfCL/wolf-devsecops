@@ -20,6 +20,7 @@ from ..auth.dependencies import require_role
 from ..core.config import ConfigError
 from ..core.credentials import resolve_token
 from ..db.session import get_db
+from ..edition import FEATURE_AI_CODEFIX, require_feature
 from ..models import AICodeFixRequest, AICodeFixResult, AIReviewContext, AIReviewResult
 from ..models_db.user import User
 from ..rbac.roles import roles_for
@@ -107,6 +108,9 @@ async def review_project(key: str) -> AIReviewResult:
 @router.post(
     "/projects/{key}/ai/code-fix",
     response_model=AICodeFixResult,
+    # Feature Pro (edición): el reviewer IA local queda como teaser Community,
+    # pero la propuesta de fix CON CÓDIGO es de pago (402 si no está en la edición).
+    dependencies=[Depends(require_feature(FEATURE_AI_CODEFIX))],
 )
 async def code_fix_project(
     key: str,

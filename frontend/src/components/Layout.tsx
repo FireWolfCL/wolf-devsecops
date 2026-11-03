@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import wolfHead from "../assets/wolf-head.svg";
 import { updatesApi } from "../api/admin";
 import { useAuth } from "../auth/AuthContext";
-import { useAsync } from "../hooks";
+import { useAsync, useMeta } from "../hooks";
 import { useI18n } from "../i18n";
 import { LANGS, LANG_NAMES, type Lang } from "../i18n/translations";
 import { WolfGuide } from "./WolfGuide";
@@ -24,6 +24,13 @@ function LangSwitcher() {
       ))}
     </select>
   );
+}
+
+// Etiqueta de edición (Community/Pro/Enterprise), manejada por el backend (/api/meta).
+const EDITION_LABEL: Record<string, string> = { community: "COMMUNITY", pro: "PRO", enterprise: "ENTERPRISE" };
+function EditionBadge() {
+  const { data } = useMeta();
+  return <span className="tag">{EDITION_LABEL[data?.edition ?? "community"] ?? "COMMUNITY"}</span>;
 }
 
 function VersionBadge() {
@@ -50,7 +57,7 @@ export function Layout() {
           style={{ maskImage: `url(${wolfHead})`, WebkitMaskImage: `url(${wolfHead})` }}
         />
         <h1>Wolf DevSecOps</h1>
-        <span className="tag">COMMUNITY</span>
+        <EditionBadge />
         <nav className="app-nav" aria-label={t("layout.mainNav")}>
           <NavLink to="/" end>{t("nav.projects")}</NavLink>
           <NavLink to="/tools">{t("nav.tools")}</NavLink>

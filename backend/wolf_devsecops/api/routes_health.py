@@ -4,12 +4,23 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from .. import __version__
+from .. import __version__, edition
 from ..core.config import AppConfig, ConfigError
 from ..services import config_service
 from .deps import get_config
 
 router = APIRouter()
+
+
+def _edition_block() -> dict:
+    """Edición efectiva + features/límites, para que el frontend muestre/oculte y
+    ponga los 'Upgrade'. Es informativo; el BACKEND es la autoridad del gate."""
+    ed = edition.current_edition()
+    return {
+        "edition": ed,
+        "features": sorted(edition.features_for(ed)),
+        "limits": edition.limits_for(ed),
+    }
 
 
 @router.get("/api/health")
@@ -34,6 +45,7 @@ def meta() -> dict:
             "sources_configured": [],
             "ai_enabled": False,  # sin config no hay IA efectiva (fail-closed)
             "config_error": str(exc),
+            **_edition_block(),
         }
     # IA EFECTIVA (ADR-015): techo del entorno AND toggle en BD AND bloque válido.
     ai_enabled = config_service.ai_effectively_enabled(config)
@@ -41,4 +53,5 @@ def meta() -> dict:
         "project_count": len(config.projects),
         "sources_configured": sorted(config.sources.keys()),
         "ai_enabled": ai_enabled,
+        **_edition_block(),
     }

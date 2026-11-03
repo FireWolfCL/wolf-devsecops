@@ -71,6 +71,11 @@ export interface Meta {
   sources_configured: string[];
   ai_enabled: boolean;
   config_error?: string;
+  /** Edición efectiva del despliegue + features premium activas. El backend es
+   *  la autoridad del gate; esto es para mostrar/ocultar y poner "Upgrade". */
+  edition?: string; // community | pro | enterprise
+  features?: string[];
+  limits?: { max_projects: number | null; max_orgs: number | null };
 }
 
 export function fetchMeta(): Promise<Meta> {

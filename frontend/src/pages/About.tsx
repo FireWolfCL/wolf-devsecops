@@ -13,6 +13,8 @@ export function About() {
   const t = useT();
   const { data: ver } = useAsync(() => updatesApi.version(), []);
   const { data: meta } = useMeta();
+  const edition = meta?.edition ?? "community";
+  const editionLabel = edition.charAt(0).toUpperCase() + edition.slice(1);
 
   return (
     <div className="about">
@@ -20,7 +22,7 @@ export function About() {
         <img src={wolfHead} alt="Wolf Industries" className="about-logo" />
         <div>
           <h2 className="about-title">
-            Wolf DevSecOps <span className="about-edition">Community</span>
+            Wolf DevSecOps <span className="about-edition">{editionLabel}</span>
           </h2>
           <p className="about-tagline">{t("about.tagline")}</p>
           <p className="about-ver mono">

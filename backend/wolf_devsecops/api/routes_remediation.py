@@ -20,6 +20,7 @@ from ..auth.dependencies import require_admin_action
 from ..connectors.github import GitHubWriteClient
 from ..core.credentials import resolve_token
 from ..db.session import get_db
+from ..edition import FEATURE_REMEDIATION_PR, require_feature
 from ..models import RemediationBranchRequest, RemediationBranchResult
 from ..models_db.user import User
 from ..rbac.roles import roles_for
@@ -42,6 +43,8 @@ def _build_write_client(gh_url: str, token: str) -> GitHubWriteClient:
 @router.post(
     "/projects/{key}/remediation/branch",
     response_model=RemediationBranchResult,
+    # Feature Pro (edición): el PR-draft / branch de remediación es de pago.
+    dependencies=[Depends(require_feature(FEATURE_REMEDIATION_PR))],
 )
 async def remediation_branch(
     key: str,

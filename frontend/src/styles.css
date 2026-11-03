@@ -114,7 +114,21 @@ tbody tr:hover { background: var(--surface); }
 .alert.ok { border-color: var(--accent); color: var(--accent); }
 .alert.info { border-color: var(--muted); color: var(--text); }
 
-.auth-box { max-width: 400px; margin: 48px auto; }
+.auth-box { max-width: 420px; margin: 48px auto; }
+/* Login brandeado: logo con glow neón, badge de edición, tagline, footer. */
+.auth-brand { text-align: center; margin-bottom: 20px; }
+.auth-mark { display: inline-block; width: 64px; height: 64px; background-color: var(--accent);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 55%, transparent)); }
+.auth-title { margin: 12px 0 2px; font-size: 24px; letter-spacing: .5px; }
+.auth-edition { font-family: var(--mono); font-size: 11px; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 6px; padding: 2px 7px; vertical-align: middle; margin-left: 6px; }
+.auth-tagline { margin: 0; color: var(--muted); font-size: 14px; }
+.auth-card { box-shadow: 0 8px 30px rgba(0,0,0,.28); border-top: 2px solid var(--accent); }
+.auth-foot { display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin-top: 18px; font-size: 12px; flex-wrap: wrap; }
 .page-title { margin: 0 0 4px; }
 .section { margin-top: 28px; }
 .section h2 { font-size: 18px; margin: 0 0 12px; }

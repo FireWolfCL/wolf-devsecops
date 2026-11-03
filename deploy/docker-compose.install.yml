@@ -34,6 +34,9 @@ services:
     build: ../backend
     environment:
       WOLF_ENVIRONMENT: production
+      # Edición del producto: community (default) | pro | enterprise. Fase 1: por
+      # entorno; fase 2 lo determinará la licencia firmada (WLA).
+      WOLF_EDITION: ${WOLF_EDITION:-community}
       WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
       DB_HOST: db
       DB_PORT: "5432"
