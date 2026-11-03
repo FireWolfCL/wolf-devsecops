@@ -38,6 +38,7 @@ from ..core.config import (
 from ..db.engine import get_sessionmaker
 from ..models_db.config import (
     AISettingsRow,
+    LDAPConfigRow,
     ProjectRow,
     ProjectSourceRow,
     SourceConfigRow,
@@ -542,3 +543,148 @@ async def set_ai_settings(
     await _after_write(session)
     await session.refresh(row)
     return row, previous != enabled
+
+
+# ─── LDAP / SSO (feature Pro) ────────────────────────────────────────────────
+_LDAP_SCHEMES = ("ldap://", "ldaps://")
+
+
+async def get_ldap_row(session: AsyncSession) -> LDAPConfigRow | None:
+    return (
+        await session.execute(select(LDAPConfigRow).where(LDAPConfigRow.id == 1))
+    ).scalar_one_or_none()
+
+
+async def get_ldap_config(session: AsyncSession):
+    """`ldap_service.LdapConfig` resuelta (bind password descifrada) o None si no hay
+    config o está deshabilitada. El objeto NO se persiste ni se loguea."""
+    from ..core.credentials import resolve_token
+    from . import ldap_service
+
+    row = await get_ldap_row(session)
+    if row is None or not row.enabled:
+        return None
+    return ldap_service.LdapConfig(
+        hosts=list(row.hosts or []),
+        base_dn=row.base_dn or "",
+        user_filter=row.user_filter or "(uid={username})",
+        user_dn_template=row.user_dn_template or None,
+        bind_dn=row.bind_dn or None,
+        bind_password=resolve_token(row.bind_password_env, row.bind_password_cipher),
+        use_ssl=bool(row.use_ssl),
+        start_tls=bool(row.start_tls),
+        tls_verify=row.tls_verify or "required",
+        tls_ca_pem=row.tls_ca_pem or None,
+        timeout_seconds=int(row.timeout_seconds or 8),
+    )
+
+
+def _validate_ldap_hosts(hosts: list[str]) -> list[str]:
+    clean: list[str] = []
+    for h in hosts or []:
+        v = (h or "").strip()
+        if not v:
+            continue
+        if not v.lower().startswith(_LDAP_SCHEMES):
+            raise ConfigWriteError(f"Host LDAP inválido (usa ldap:// o ldaps://): {v}")
+        clean.append(v)
+    return clean
+
+
+async def set_ldap_settings(
+    session: AsyncSession,
+    *,
+    enabled: bool,
+    hosts: list[str],
+    base_dn: str,
+    use_ssl: bool = True,
+    start_tls: bool = False,
+    tls_verify: str = "required",
+    tls_ca_pem: str | None = None,
+    user_dn_template: str | None = None,
+    user_filter: str = "(uid={username})",
+    bind_dn: str | None = None,
+    bind_password_env: str | None = None,
+    timeout_seconds: int = 8,
+) -> LDAPConfigRow:
+    """Guarda la config del directorio (fila única). NO toca el bind password cifrado
+    (eso va por `set_ldap_bind_password`, igual que el token de una fuente). Activar sin
+    host, base_dn, o sin forma de bind (ni plantilla ni cuenta de servicio) → ConfigWriteError."""
+    clean_hosts = _validate_ldap_hosts(hosts)
+    env_name = validate_token_env(bind_password_env)
+    if tls_verify not in {"required", "relaxed"}:
+        raise ConfigWriteError("tls_verify debe ser 'required' o 'relaxed'.")
+    template = (user_dn_template or "").strip() or None
+    filt = (user_filter or "").strip() or "(uid={username})"
+    if "{username}" not in (template or filt):
+        raise ConfigWriteError("La plantilla/filtro de usuario debe contener {username}.")
+    try:
+        timeout = int(timeout_seconds)  # int obligatorio (gotcha ldap3)
+    except (TypeError, ValueError) as exc:
+        raise ConfigWriteError("timeout_seconds debe ser un entero.") from exc
+    if timeout < 1 or timeout > 60:
+        raise ConfigWriteError("timeout_seconds debe estar entre 1 y 60.")
+    if enabled:
+        if not clean_hosts:
+            raise ConfigWriteError("Para activar LDAP se requiere al menos un host.")
+        if not (base_dn or "").strip():
+            raise ConfigWriteError("Para activar LDAP se requiere base_dn.")
+        if template is None and not (bind_dn or "").strip():
+            raise ConfigWriteError(
+                "Define user_dn_template (bind directo) o bind_dn (cuenta de servicio)."
+            )
+        # Transporte cifrado obligatorio: sin LDAPS ni StartTLS, la password de cada
+        # usuario (y la del service account) viajaría en claro por la red. No se permite.
+        if not use_ssl and not start_tls:
+            raise ConfigWriteError(
+                "LDAP sin cifrado: activa LDAPS (use_ssl) o StartTLS. No se permite "
+                "enviar credenciales en texto plano."
+            )
+
+    row = await get_ldap_row(session)
+    if row is None:
+        row = LDAPConfigRow(id=1)
+        session.add(row)
+    row.enabled = enabled
+    row.hosts = clean_hosts
+    row.base_dn = (base_dn or "").strip()
+    row.use_ssl, row.start_tls, row.tls_verify = bool(use_ssl), bool(start_tls), tls_verify
+    row.tls_ca_pem = (tls_ca_pem or "").strip() or None
+    row.user_dn_template, row.user_filter = template, filt
+    row.bind_dn = (bind_dn or "").strip() or None
+    row.bind_password_env = env_name
+    row.timeout_seconds = timeout
+    await session.commit()
+    await _after_write(session)
+    await session.refresh(row)
+    return row
+
+
+async def set_ldap_bind_password(session: AsyncSession, password_plain: str) -> LDAPConfigRow:
+    """Cifra y guarda el bind password de la cuenta de servicio (Fernet). La fila LDAP
+    debe existir (créala antes con set_ldap_settings). El texto plano se descarta aquí."""
+    from ..auth.security import encrypt_source_token
+
+    row = await get_ldap_row(session)
+    if row is None:
+        raise ConfigWriteError("Configura el directorio LDAP antes de fijar el bind password.")
+    secret = (password_plain or "").strip()
+    if not secret:
+        raise ConfigWriteError("El bind password no puede estar vacío.")
+    row.bind_password_cipher = encrypt_source_token(secret)
+    await session.commit()
+    await _after_write(session)
+    await session.refresh(row)
+    return row
+
+
+async def clear_ldap_bind_password(session: AsyncSession) -> LDAPConfigRow | None:
+    """Borra el bind password cifrado: vuelve a resolver desde la env var. None si no existe."""
+    row = await get_ldap_row(session)
+    if row is None:
+        return None
+    row.bind_password_cipher = None
+    await session.commit()
+    await _after_write(session)
+    await session.refresh(row)
+    return row

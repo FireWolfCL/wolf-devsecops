@@ -29,6 +29,9 @@ _LOCKED_MESSAGE = (
 )
 _INVALID_CREDENTIALS = "Usuario o contraseña incorrectos"
 _RATE_LIMITED = "Demasiados intentos. Espera un momento y reintenta."
+# 503 genérico: NO distingue SSO-off / no-configurado / réplicas-caídas (no filtrar el
+# estado del despliegue a un no autenticado — T-LDAP-03). El motivo real va al audit.
+_AUTH_UNAVAILABLE = "Servicio de autenticación no disponible temporalmente."
 
 
 def _client_ip(request: Request) -> str | None:
@@ -57,7 +60,16 @@ async def login(
     if user is not None and auth_service.is_locked(user):
         raise HTTPException(status.HTTP_423_LOCKED, _LOCKED_MESSAGE)
 
-    if not await auth_service.authenticate(db, user, form_data.password):
+    try:
+        authenticated = await auth_service.authenticate(db, user, form_data.password)
+    except auth_service.DirectoryUnavailable as exc:
+        # Usuario LDAP con el directorio caído (o SSO no disponible en la edición): 503
+        # honesto, SIN contar el intento contra el lockout (no bloquear por una caída del
+        # DC). Las cuentas locales (break-glass) no pasan por aquí: su bind es local.
+        await auth_service.audit_login_failed(db, form_data.username, ip)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _AUTH_UNAVAILABLE) from exc
+
+    if not authenticated:
         # Solo se contabiliza el fallo contra una cuenta existente y activa (no se
         # bloquea a un inactivo ni se crea señal para un username inexistente).
         if user is not None and user.is_active:

@@ -91,6 +91,45 @@ class AISettingsRow(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class LDAPConfigRow(Base):
+    """Config de directorio (SSO/LDAP/AD) — fila única `id=1`, espeja AISettingsRow.
+    Feature Pro: los endpoints que la escriben van gated por `require_feature(FEATURE_SSO)`.
+
+    Secreto (bind password): sigue el patrón de `source_config` — `bind_password_env`
+    guarda el NOMBRE de la env var y `bind_password_cipher` el VALOR cifrado con Fernet
+    (misma llave de reposo que el MFA, nunca la de firma JWT). La API expone solo
+    `bind_password_present: bool`, jamás el valor. `resolve_token` da precedencia a la BD.
+    """
+
+    __tablename__ = "ldap_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)  # fila única
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Réplicas del directorio, ej. ["ldaps://dc1.corp:636", "ldaps://dc2.corp:636"].
+    # Se prueban TODAS antes de rechazar (replication lag da fallos intermitentes).
+    hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    use_ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    start_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # "required" = valida el certificado del servidor (recomendado) | "relaxed" = no valida.
+    tls_verify: Mapped[str] = mapped_column(String(10), nullable=False, default="required")
+    # CA corporativa (PEM) para validar el cert del DC cuando no está en el trust store del
+    # SO. NO es secreto (es un cert público): permite sostener tls_verify="required".
+    tls_ca_pem: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    base_dn: Mapped[str] = mapped_column(String(400), nullable=False, default="")
+    # Si está presente → bind DIRECTO con esta plantilla (ej. "uid={username},ou=people,...").
+    # Si es NULL → search+bind: se bindea con la cuenta de servicio y se busca por user_filter.
+    user_dn_template: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # Filtro de búsqueda del usuario (search+bind). AD: "(sAMAccountName={username})";
+    # FreeIPA: "(uid={username})".
+    user_filter: Mapped[str] = mapped_column(String(400), nullable=False,
+                                             default="(uid={username})")
+    bind_dn: Mapped[str | None] = mapped_column(String(400), nullable=True)  # cuenta de servicio
+    bind_password_env: Mapped[str | None] = mapped_column(String(120), nullable=True)  # NOMBRE
+    bind_password_cipher: Mapped[str | None] = mapped_column(Text(), nullable=True)  # Fernet
+    # ldap3 2.9.1 exige int en los timeouts (float revienta con struct.error sobre TLS).
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+
+
 class SystemConfigRow(Base):
     __tablename__ = "system_config"
 

@@ -31,6 +31,9 @@ from ..rbac.roles import roles_for
 from ..schemas_admin import (
     AISettingsIn,
     AISettingsOut,
+    LDAPBindPasswordIn,
+    LDAPConfigIn,
+    LDAPConfigOut,
     ProjectIn,
     ProjectOut,
     SourceIn,
@@ -367,3 +370,79 @@ async def put_ai(
         {"enabled": row.enabled, "provider": row.provider, "model": row.model},
     )
     return _ai_out(row)
+
+
+# ─── LDAP / SSO (feature Pro) ──────────────────────────────────────────────────
+# El router ya exige admin + MFA. Las ESCRITURAS añaden require_feature(FEATURE_SSO)
+# (402 fuera de Pro). La LECTURA (GET) no se gatea: deja a la UI mostrar el upsell.
+_require_sso = Depends(edition.require_feature(edition.FEATURE_SSO))
+
+
+def _ldap_out(row, *, sso_available: bool) -> LDAPConfigOut:
+    if row is None:
+        return LDAPConfigOut(
+            enabled=False, hosts=[], base_dn="", use_ssl=True, start_tls=False,
+            tls_verify="required", tls_ca_pem=None, user_dn_template=None,
+            user_filter="(uid={username})", bind_dn=None, bind_password_env=None,
+            bind_password_present=False, timeout_seconds=8, sso_available=sso_available,
+        )
+    return LDAPConfigOut(
+        enabled=row.enabled, hosts=list(row.hosts or []), base_dn=row.base_dn,
+        use_ssl=row.use_ssl, start_tls=row.start_tls, tls_verify=row.tls_verify,
+        tls_ca_pem=row.tls_ca_pem, user_dn_template=row.user_dn_template,
+        user_filter=row.user_filter, bind_dn=row.bind_dn,
+        bind_password_env=row.bind_password_env,
+        bind_password_present=bool(row.bind_password_cipher),
+        timeout_seconds=row.timeout_seconds, sso_available=sso_available,
+    )
+
+
+@router.get("/ldap", response_model=LDAPConfigOut)
+async def get_ldap(db: AsyncSession = Depends(get_db)) -> LDAPConfigOut:
+    row = await config_service.get_ldap_row(db)
+    return _ldap_out(row, sso_available=edition.is_enabled(edition.FEATURE_SSO))
+
+
+@router.put("/ldap", response_model=LDAPConfigOut, dependencies=[_require_sso])
+async def put_ldap(
+    payload: LDAPConfigIn, admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> LDAPConfigOut:
+    try:
+        row = await config_service.set_ldap_settings(
+            db, enabled=payload.enabled, hosts=payload.hosts, base_dn=payload.base_dn,
+            use_ssl=payload.use_ssl, start_tls=payload.start_tls, tls_verify=payload.tls_verify,
+            tls_ca_pem=payload.tls_ca_pem,
+            user_dn_template=payload.user_dn_template, user_filter=payload.user_filter,
+            bind_dn=payload.bind_dn, bind_password_env=payload.bind_password_env,
+            timeout_seconds=payload.timeout_seconds,
+        )
+    except config_service.ConfigWriteError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await _audit(db, admin, "config.ldap_updated", "ldap", "ldap",
+                 {"enabled": row.enabled, "hosts": len(row.hosts or []),
+                  "mode": "template" if row.user_dn_template else "service-bind"})
+    return _ldap_out(row, sso_available=True)
+
+
+@router.put("/ldap/bind-password", response_model=LDAPConfigOut, dependencies=[_require_sso])
+async def set_ldap_bind_password(
+    payload: LDAPBindPasswordIn, admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> LDAPConfigOut:
+    try:
+        row = await config_service.set_ldap_bind_password(db, payload.password)
+    except config_service.ConfigWriteError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    # El valor NUNCA entra al audit (solo que se fijó uno).
+    await _audit(db, admin, "config.ldap_bind_password_set", "ldap", "ldap", {"present": True})
+    return _ldap_out(row, sso_available=True)
+
+
+@router.delete("/ldap/bind-password", response_model=LDAPConfigOut, dependencies=[_require_sso])
+async def clear_ldap_bind_password(
+    admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> LDAPConfigOut:
+    row = await config_service.clear_ldap_bind_password(db)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "El directorio LDAP no está configurado.")
+    await _audit(db, admin, "config.ldap_bind_password_set", "ldap", "ldap", {"present": False})
+    return _ldap_out(row, sso_available=True)

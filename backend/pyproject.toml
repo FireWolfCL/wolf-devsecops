@@ -31,6 +31,9 @@ dependencies = [
     # Login por formulario OAuth2 (A2): FastAPI requiere python-multipart para
     # parsear `application/x-www-form-urlencoded` en POST /auth/login.
     "python-multipart>=0.0.18",
+    # SSO/LDAP/AD (feature Pro, E2): ldap3 puro-Python (sin deps de sistema, encaja con
+    # el deploy slim autohospedado). Pineado por el gotcha de timeouts int de 2.9.1.
+    "ldap3==2.9.1",
 ]
 
 [project.optional-dependencies]

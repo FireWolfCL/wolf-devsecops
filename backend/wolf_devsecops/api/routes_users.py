@@ -15,6 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import edition
 from ..auth.dependencies import get_current_user, require_admin_action
 from ..db.session import get_db
 from ..models_db.user import User
@@ -126,6 +127,11 @@ async def create_user(
     admin: User = _admin_only,
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
+    if payload.auth_source == "ldap" and not edition.is_enabled(edition.FEATURE_SSO):
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            "Crear cuentas LDAP requiere la edición Pro (SSO).",
+        )
     try:
         user = await user_service.create_user(
             db,
@@ -135,6 +141,7 @@ async def create_user(
             email=payload.email,
             full_name=payload.full_name,
             must_change_password=payload.must_change_password,
+            auth_source=payload.auth_source,
         )
     except user_service.DuplicateUserError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "username o email ya en uso") from exc
@@ -145,7 +152,7 @@ async def create_user(
         actor_username=admin.username,
         target_type="user",
         target_id=user.id,
-        detail={"role": user.role.value},
+        detail={"role": user.role.value, "auth_source": user.auth_source},
     )
     return UserOut.model_validate(user)
 

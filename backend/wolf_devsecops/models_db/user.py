@@ -31,6 +31,11 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     # nullable: deja la puerta a cuentas federadas (SSO) sin password local (ADR-013 seam).
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Fuente de autenticación: "local" (bind contra hashed_password) o "ldap" (bind contra
+    # el directorio, feature Pro). El admin local de break-glass es siempre "local" y su
+    # login nunca toca el directorio. Un usuario "ldap" no tiene hashed_password.
+    auth_source: Mapped[str] = mapped_column(String(10), nullable=False, default="local",
+                                             server_default="local")
     full_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     role: Mapped[Role] = mapped_column(
         SAEnum(Role, native_enum=False, length=20, validate_strings=True),

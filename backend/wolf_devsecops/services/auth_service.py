@@ -18,6 +18,7 @@ Invariantes de seguridad (ver cada función):
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -37,6 +38,13 @@ from ..models_db.user import User
 from ..rbac.roles import Role
 from ..settings import get_settings
 from . import audit_service
+
+
+class DirectoryUnavailable(Exception):
+    """El directorio LDAP de un usuario `auth_source="ldap"` no se pudo alcanzar (todas
+    las réplicas caídas) o SSO no está disponible en esta edición. El login lo traduce a
+    503 SIN contar el intento contra el lockout — distinto de credenciales inválidas (401).
+    Los usuarios locales (break-glass) nunca lo disparan: su login no toca el directorio."""
 
 
 def _utcnow() -> datetime:
@@ -96,6 +104,11 @@ async def authenticate(session: AsyncSession, user: User | None, password: str) 
     Si el hash está obsoleto (p. ej. un bcrypt importado), lo RE-HASHEA a argon2id
     con la password en claro recién validada y lo persiste (patrón Check4Work).
     """
+    # Usuarios federados (SSO/LDAP): bind contra el directorio, no contra un hash local.
+    # Va ANTES del chequeo de hashed_password (un usuario ldap no tiene password local).
+    if user is not None and user.is_active and user.auth_source == "ldap":
+        return await _authenticate_ldap_user(session, user, password)
+
     if user is None or not user.is_active or not user.hashed_password:
         await asyncio.to_thread(verify_password, password, _dummy_hash())
         return False
@@ -108,6 +121,61 @@ async def authenticate(session: AsyncSession, user: User | None, password: str) 
         user.hashed_password = await asyncio.to_thread(hash_password, password)
         await session.commit()
     return True
+
+
+# Pool DEDICADO y acotado para los binds LDAP (T-LDAP-01). Clave de disponibilidad:
+# los binds LDAP pueden retener un hilo varios segundos; si compartieran el executor por
+# defecto de `asyncio.to_thread` (que usa el argon2 del login LOCAL), un flood de logins
+# LDAP dejaría sin hilos al admin de break-glass. Aislado aquí, el camino local nunca
+# compite por hilos con LDAP. `max_workers` acota la concurrencia; el exceso espera hasta
+# el presupuesto y degrada a 503. El rate-limit (IP,username) de /login limita el caudal.
+_LDAP_MAX_CONCURRENCY = 4
+_ldap_executor: concurrent.futures.ThreadPoolExecutor | None = None
+
+
+def _get_ldap_executor() -> concurrent.futures.ThreadPoolExecutor:
+    global _ldap_executor
+    if _ldap_executor is None:
+        _ldap_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=_LDAP_MAX_CONCURRENCY, thread_name_prefix="ldap-bind"
+        )
+    return _ldap_executor
+
+
+async def _authenticate_ldap_user(session: AsyncSession, user: User, password: str) -> bool:
+    """Bind de un usuario `auth_source="ldap"` contra el directorio.
+
+    AUTHENTICATED→True, INVALID_CREDENTIALS→False (mismo camino uniforme que una password
+    local mala: 401). Directorio caído, saturado o SSO no disponible → DirectoryUnavailable
+    (503, sin lockout). El bind síncrono corre en un pool DEDICADO (no el de argon2)."""
+    from .. import edition
+    from . import config_service, ldap_service
+
+    if not edition.is_enabled(edition.FEATURE_SSO):
+        # Downgrade Pro→Community con usuarios LDAP: degradación honesta; el admin local sigue.
+        raise DirectoryUnavailable("SSO no está disponible en esta edición.")
+    cfg = await config_service.get_ldap_config(session)
+    if cfg is None:
+        raise DirectoryUnavailable("El directorio no está configurado o está deshabilitado.")
+
+    loop = asyncio.get_running_loop()
+    # Presupuesto total del lado async: algo más que el deadline interno del bind; si el
+    # pool está saturado (flood), expira y responde 503 sin colgar el request.
+    budget = max(int(cfg.timeout_seconds), 1) * 2 + 2
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                _get_ldap_executor(), ldap_service.authenticate_ldap, cfg, user.username, password
+            ),
+            timeout=budget,
+        )
+    except TimeoutError as exc:  # asyncio.wait_for expira con TimeoutError (3.11+)
+        raise DirectoryUnavailable("El directorio no respondió a tiempo.") from exc
+    if result is ldap_service.LdapAuthResult.AUTHENTICATED:
+        return True
+    if result is ldap_service.LdapAuthResult.INVALID_CREDENTIALS:
+        return False
+    raise DirectoryUnavailable("El directorio no respondió (todas las réplicas inalcanzables).")
 
 
 # ─── Lockout ────────────────────────────────────────────────────────────────

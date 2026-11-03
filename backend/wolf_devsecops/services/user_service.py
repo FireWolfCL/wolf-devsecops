@@ -78,21 +78,28 @@ async def create_user(
     session: AsyncSession,
     *,
     username: str,
-    password: str,
+    password: str | None,
     role: Role = Role.viewer,
     email: str | None = None,
     full_name: str | None = None,
     must_change_password: bool = False,
+    auth_source: str = "local",
 ) -> User:
-    """Crea un usuario con password hasheada (argon2id). Lanza DuplicateUserError
-    si el username/email ya existe (el router lo mapea a 409)."""
+    """Crea un usuario. `auth_source="local"` → password hasheada (argon2id) obligatoria.
+    `auth_source="ldap"` → cáscara federada sin password local (el bind va contra el
+    directorio); `password` se ignora y `must_change_password` no aplica. Lanza
+    DuplicateUserError si el username/email ya existe (el router lo mapea a 409)."""
+    is_ldap = auth_source == "ldap"
+    if not is_ldap and not password:
+        raise ValueError("Una cuenta local requiere password.")
     user = User(
         username=username,
         email=email,
-        hashed_password=hash_password(password),
+        hashed_password=None if is_ldap else hash_password(password),
         full_name=full_name,
         role=role,
-        must_change_password=must_change_password,
+        auth_source=auth_source,
+        must_change_password=False if is_ldap else must_change_password,
     )
     session.add(user)
     try:

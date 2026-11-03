@@ -22,8 +22,8 @@ from wolf_devsecops.services import user_service
 from wolf_devsecops.settings import get_settings
 
 # Última migración de alembic (actualizar al agregar una nueva revisión).
-HEAD = "0006_source_token_cipher"
-_MIGRATION_COUNT = 6  # nº total de revisiones (pendientes en una BD virgen)
+HEAD = "0007_ldap_sso"
+_MIGRATION_COUNT = 7  # nº total de revisiones (pendientes en una BD virgen)
 
 
 def _bearer(user):

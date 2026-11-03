@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .rbac.roles import Role
 
@@ -202,15 +202,70 @@ class AISettingsOut(BaseModel):
     effective_enabled: bool  # env AND db AND bloque válido (lo que decide el gate 503)
 
 
+class LDAPConfigIn(BaseModel):
+    """Cuerpo de PUT /settings/ldap. NO incluye el bind password (va por su endpoint
+    write-only, igual que el token de una fuente). `bind_password_env` es el NOMBRE de
+    la env var, nunca el valor."""
+
+    model_config = _STRICT
+
+    enabled: bool = False
+    hosts: list[str] = Field(default_factory=list)
+    base_dn: str = Field(default="", max_length=400)
+    use_ssl: bool = True
+    start_tls: bool = False
+    tls_verify: str = Field(default="required", pattern=r"^(required|relaxed)$")
+    tls_ca_pem: str | None = Field(default=None, max_length=32000)  # CA PEM (cert público)
+    user_dn_template: str | None = Field(default=None, max_length=400)
+    user_filter: str = Field(default="(uid={username})", max_length=400)
+    bind_dn: str | None = Field(default=None, max_length=400)
+    bind_password_env: str | None = Field(default=None, max_length=120)
+    timeout_seconds: int = Field(default=8, ge=1, le=60)
+
+
+class LDAPConfigOut(BaseModel):
+    enabled: bool
+    hosts: list[str]
+    base_dn: str
+    use_ssl: bool
+    start_tls: bool
+    tls_verify: str
+    tls_ca_pem: str | None = None  # CA PEM (cert público, no secreto)
+    user_dn_template: str | None = None
+    user_filter: str
+    bind_dn: str | None = None
+    bind_password_env: str | None = None
+    bind_password_present: bool = False  # hay un bind password cifrado en BD (nunca el valor)
+    timeout_seconds: int
+    sso_available: bool  # la edición actual habilita FEATURE_SSO (si no, 402 al escribir)
+
+
+class LDAPBindPasswordIn(BaseModel):
+    """PUT /settings/ldap/bind-password — write-only. El VALOR se cifra y jamás se devuelve."""
+
+    model_config = _STRICT
+
+    password: str = Field(min_length=1, max_length=400)
+
+
 class UserCreate(BaseModel):
     model_config = _STRICT
 
     username: str = Field(min_length=3, max_length=100, pattern=r"^[A-Za-z0-9._@-]+$")
-    password: str = Field(min_length=8, max_length=128)
+    # Opcional: una cuenta LDAP (auth_source="ldap") no tiene password local (bind contra
+    # el directorio). Para una cuenta local es obligatoria (lo valida el model_validator).
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     role: Role = Role.viewer
     email: str | None = Field(default=None, max_length=255)
     full_name: str | None = Field(default=None, max_length=100)
     must_change_password: bool = True
+    auth_source: str = Field(default="local", pattern=r"^(local|ldap)$")
+
+    @model_validator(mode="after")
+    def _password_required_for_local(self) -> UserCreate:
+        if self.auth_source == "local" and not self.password:
+            raise ValueError("Una cuenta local requiere password.")
+        return self
 
 
 class UserUpdate(BaseModel):
@@ -232,6 +287,7 @@ class UserOut(BaseModel):
     full_name: str | None = None
     role: Role
     is_active: bool
+    auth_source: str = "local"
     mfa_enabled: bool
     must_change_password: bool
     locked_until: datetime | None = None

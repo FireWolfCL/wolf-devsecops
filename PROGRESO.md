@@ -1,6 +1,6 @@
 # PROGRESO — Wolf DevSecOps · Monetización (Community → Pro/Enterprise)
 
-**Última actualización:** 2026-11-03 · **Global: 68%**
+**Última actualización:** 2026-11-03 · **Global: 70%**
 
 Pipeline para separar Community (gratis, source-available) de Pro/Enterprise.
 Enfoque: *edition-flag primero* (WOLF_EDITION), licencia firmada WLA después.
@@ -30,12 +30,21 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
      (campo Organización en el formulario de repos + gate 402 al introducir org nueva)
 - ✅ Ventana de historial (30d Community / ilimitado Pro)
 
-## Fase E2 — Features nuevas de Pro (peso 4) — 20%
-- ⬜ SSO / LDAP / Active Directory (reciclar de otros proyectos Wolf)
+## Fase E2 — Features nuevas de Pro (peso 4) — 30%
+- 🔄 SSO / LDAP / Active Directory — **backend listo y revisado** (ldap3, failover de 3
+     estados, Pro-gated, migración 0007). Pasó crypto + threat-hardening; must-fix aplicados
+     (transporte cifrado obligatorio, executor LDAP dedicado anti-DoS/break-glass, CA PEM,
+     service-bind anónimo, 503 genérico). **Falta UI admin (Stage 2) + roster JIT (Stage 3).**
 - ⬜ Reportes programados (envío automático)
 - ⬜ Reporte de cumplimiento (mapeo ISO/CIS, PDF)
 - ✅ Export + retención de auditoría (endpoint gated + tab Admin + purga en scheduler)
 - ⬜ Canal de updates firmado
+
+> Residuos de seguridad SSO documentados (revisiones 2026-11-03): oráculo de timing
+> local/LDAP (aceptable; acotado por rate-limit+lockout), amplificación de lockout AD
+> cross-system (aceptable), e invariante operacional "≥1 admin local" para break-glass
+> (a forzar en provisión/downgrade, Stage 3). Rotación de `WOLF_MFA_FERNET_KEY` debe
+> re-cifrar a la vez: secreto MFA + tokens de fuente + bind password LDAP.
 
 ## Fase E3 — Enterprise (peso 2) — 0%
 - ⬜ White-label / marca propia
