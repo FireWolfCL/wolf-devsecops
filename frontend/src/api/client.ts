@@ -99,7 +99,7 @@ export async function reviewProjectAI(key: string): Promise<AIReviewResult> {
 // como estados esperados. Ni base_url ni token viajan: el backend los resuelve.
 export function proposeCodeFix(
   key: string,
-  body: { finding_ref: string; provider: AIProviderKind; model: string },
+  body: { finding_ref: string; provider: AIProviderKind; model: string; source?: "defectdojo" | "sonarqube" },
 ): Promise<AICodeFixResult> {
   return request<AICodeFixResult>(`/api/v1/projects/${encodeURIComponent(key)}/ai/code-fix`, {
     method: "POST",

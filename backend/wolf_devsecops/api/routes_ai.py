@@ -135,10 +135,10 @@ async def code_fix_project(
     if gh_source is None:
         raise HTTPException(status_code=422, detail="La fuente 'github' no está configurada.")
 
-    # Resuelve el finding agregado (DefectDojo) → file_path(+line). La ruta viene del
-    # finding, pero se valida server-side dentro de code_context (anti-traversal).
+    # Resuelve el finding agregado (DefectDojo o Sonar) → file_path(+line). La ruta
+    # viene del finding, pero se valida server-side dentro de code_context (anti-traversal).
     aggregator = get_aggregator()
-    detail = await aggregator.get_source_detail(project, "defectdojo")
+    detail = await aggregator.get_source_detail(project, body.source)
     findings = detail.payload.get("findings", []) if detail.payload else []
     match = next(
         (

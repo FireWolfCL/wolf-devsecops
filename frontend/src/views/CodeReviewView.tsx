@@ -21,8 +21,10 @@ import { useT } from "../i18n";
 // Allow-list de modelos hosted (espejo del backend; el servidor valida igual).
 const HOSTED_MODELS = ["claude-sonnet-4-5", "claude-opus-4-8", "gpt-4o"] as const;
 
-// El backend resuelve findings desde DefectDojo (finding_ref = id o título).
-const FINDINGS_SOURCE = "defectdojo";
+// Fuentes con findings ubicados (archivo:línea) que el backend puede resolver.
+type FindingSource = "defectdojo" | "sonarqube";
+// Un finding con su fuente: el backend lo resuelve en esa fuente (finding_ref = id/título).
+type Item = { f: TrivyFinding; source: FindingSource };
 
 const SEV_CLASS: Record<string, string> = {
   CRITICAL: "crit", HIGH: "high", MEDIUM: "med", LOW: "low", UNKNOWN: "muted", INFO: "muted",
@@ -108,14 +110,19 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
   const { data: meta } = useMeta();
   const aiEnabled = meta?.ai_enabled ?? false;
 
-  const { data, loading, error } = useAsync(
-    () => fetchSourceDetail(projectKey, FINDINGS_SOURCE),
-    [projectKey],
-  );
-  const findings = useMemo(
-    () => ((data?.payload?.findings as TrivyFinding[] | undefined) ?? []),
-    [data],
-  );
+  const dd = useAsync(() => fetchSourceDetail(projectKey, "defectdojo"), [projectKey]);
+  const sq = useAsync(() => fetchSourceDetail(projectKey, "sonarqube"), [projectKey]);
+  const loading = dd.loading || sq.loading;
+  const error = dd.error ?? sq.error;
+  // Lista unificada: cada finding sabe de qué fuente viene (para el code-fix).
+  const items = useMemo<Item[]>(() => {
+    const ddF = (dd.data?.payload?.findings as TrivyFinding[] | undefined) ?? [];
+    const sqF = (sq.data?.payload?.findings as TrivyFinding[] | undefined) ?? [];
+    return [
+      ...ddF.map((f): Item => ({ f, source: "defectdojo" })),
+      ...sqF.map((f): Item => ({ f, source: "sonarqube" })),
+    ];
+  }, [dd.data, sq.data]);
 
   const [query, setQuery] = useState("");
   const [selIdx, setSelIdx] = useState<number | null>(null);
@@ -138,29 +145,30 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
   const q = query.trim().toLowerCase();
   const rows = useMemo(
     () =>
-      findings
-        .map((f, i) => ({ f, i }))
+      items
+        .map((it, i) => ({ ...it, i }))
         .filter(({ f }) => {
           if (!q) return true;
           return [f.id, f.title, f.target, f.pkg, f.severity]
             .filter(Boolean)
             .some((v) => String(v).toLowerCase().includes(q));
         }),
-    [findings, q],
+    [items, q],
   );
 
-  const selected = selIdx !== null ? findings[selIdx] : undefined;
+  const selected = selIdx !== null ? items[selIdx]?.f : undefined;
+  const selectedSource = selIdx !== null ? items[selIdx]?.source : undefined;
   const selectedRef = selected ? refOf(selected) : null;
   const model = provider === "hosted" ? hostedModel : localModel.trim();
   const canRun = aiEnabled && !busy && !!selectedRef && !!selected?.target && model.length > 0;
 
   async function run() {
-    if (!selectedRef) return;
+    if (!selectedRef || !selectedSource) return;
     setBusy(true);
     setResult(null);
     setFailure(null);
     try {
-      setResult(await proposeCodeFix(projectKey, { finding_ref: selectedRef, provider, model }));
+      setResult(await proposeCodeFix(projectKey, { finding_ref: selectedRef, provider, model, source: selectedSource }));
     } catch (e: unknown) {
       setFailure(toFailure(e));
     } finally {
@@ -192,7 +200,7 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
         {/* ── Lista de findings ─────────────────────────────────────────── */}
         <section className="cr-list" aria-label={t("cr.findings")}>
           <div className="list-bar">
-            <h3 style={{ margin: 0, fontSize: 15 }}>{t("cr.findings")} ({findings.length})</h3>
+            <h3 style={{ margin: 0, fontSize: 15 }}>{t("cr.findings")} ({items.length})</h3>
             <input
               type="search"
               className="search"
@@ -204,11 +212,11 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
           </div>
           {loading && <p className="state" aria-busy="true">{t("common.loading")}</p>}
           {error && <div className="alert err" role="alert">{t("cr.findingsError", { error })}</div>}
-          {!loading && !error && findings.length === 0 && <p className="empty">{t("cr.noFindings")}</p>}
-          {!loading && findings.length > 0 && rows.length === 0 && <p className="empty">{t("cr.noMatch")}</p>}
+          {!loading && !error && items.length === 0 && <p className="empty">{t("cr.noFindings")}</p>}
+          {!loading && items.length > 0 && rows.length === 0 && <p className="empty">{t("cr.noMatch")}</p>}
           <ul className="cr-items">
-            {rows.map(({ f, i }) => (
-              <li key={`${f.id ?? "x"}-${i}`}>
+            {rows.map(({ f, source, i }) => (
+              <li key={`${source}-${f.id ?? "x"}-${i}`}>
                 <button
                   type="button"
                   className={`cr-item${selIdx === i ? " active" : ""}`}
@@ -218,6 +226,7 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
                   <span className={`sev-pill ${SEV_CLASS[f.severity] ?? "muted"}`}>
                     {t(SEV_KEY[f.severity] ?? "sev.unknown")}
                   </span>{" "}
+                  <span className="badge off" style={{ fontSize: 10 }}>{t(`cr.source.${source}`)}</span>{" "}
                   <span className="mono">{f.id ?? "—"}</span>
                   <span className="cr-item-title">{f.title || "—"}</span>
                   <span className="mono muted cr-item-where">{f.target ?? t("cr.noWhere")}</span>

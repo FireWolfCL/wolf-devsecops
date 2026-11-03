@@ -226,13 +226,26 @@ class ToolDashboard(BaseModel):
 
 # ─── Reporte documental por proyecto (entregable) ────────────────────────────
 class ReportSection(BaseModel):
-    """Una herramienta dentro del reporte: QUÉ está afectado y CÓMO remediarlo."""
+    """Una herramienta dentro del reporte: QUÉ está afectado y CÓMO remediarlo.
+
+    El contrato es DATO ESTRUCTURADO, no texto pre-redactado: el idioma del
+    reporte lo decide el frontend con `t(...)`. Antes el backend componía frases
+    en español ("6 activos · 0 críticos"), lo que mezclaba idiomas cuando el panel
+    corría en inglés. Ahora cada sección lleva los números/estados crudos.
+    """
     source: str  # containers | defectdojo | sonarqube | github
-    tool_label: str
+    kind: Literal["findings", "quality", "ci"] = "findings"
     status: SourceStatus
-    headline: str  # línea humana (p. ej. "6 activos · 0 críticos · 2 altos")
-    note: str | None = None  # detalle no-tabular (gate de Sonar, tag de release…)
-    findings: list[dict] = []  # lista accionable normalizada (contenedores/DefectDojo)
+    # Secciones de hallazgos (contenedores/DefectDojo) y ahora también Sonar:
+    counts: SeverityCount | None = None
+    total_active: int | None = None
+    # Sección de calidad (SonarQube): gate/bugs/vulns/cobertura.
+    quality: QualitySummary | None = None
+    # Sección CI/Release (GitHub).
+    ci: CISummary | None = None
+    release: ReleaseSummary | None = None
+    # Lista accionable normalizada (contenedores/DefectDojo/Sonar). DATO, no marcado.
+    findings: list[dict] = []
     link: str | None = None  # deep-link a la herramienta (URL pública)
 
 
@@ -241,8 +254,8 @@ class ProjectReport(BaseModel):
     name: str
     org: str = "Wolf"
     generated_at: datetime
+    # Postura estructurada: el frontend arma la línea humana en el idioma activo.
     posture: PostureScore | None = None
-    posture_summary: str = ""  # línea humana de la postura
     sections: list[ReportSection] = []
 
 
@@ -296,6 +309,9 @@ class AICodeFixRequest(BaseModel):
     finding_ref: str = Field(min_length=1, max_length=300)
     provider: Literal["local", "hosted"]
     model: str = Field(min_length=1, max_length=120)
+    # Fuente del finding a resolver (file_path+line). DefectDojo por defecto
+    # (compat); "sonarqube" permite proponer fix sobre un issue de calidad.
+    source: Literal["defectdojo", "sonarqube"] = "defectdojo"
 
 
 class AICodeFixResult(BaseModel):

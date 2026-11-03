@@ -151,12 +151,17 @@ export interface ToolDashboard {
 }
 
 // ─── Reporte documental por proyecto (GET /projects/{key}/report) ───────────
+// Contrato ESTRUCTURADO: el frontend arma los textos en el idioma activo (antes
+// el backend los redactaba en español y se mezclaban los idiomas).
 export interface ReportSection {
   source: string; // containers | defectdojo | sonarqube | github
-  tool_label: string;
+  kind: "findings" | "quality" | "ci";
   status: SourceStatus;
-  headline: string;
-  note: string | null;
+  counts: SeverityCount | null;
+  total_active: number | null;
+  quality: QualitySummary | null;
+  ci: CISummary | null;
+  release: ReleaseSummary | null;
   findings: TrivyFinding[];
   link: string | null;
 }
@@ -167,7 +172,6 @@ export interface ProjectReport {
   org: string;
   generated_at: string;
   posture: PostureScore | null;
-  posture_summary: string;
   sections: ReportSection[];
 }
 
@@ -192,6 +196,8 @@ export interface TrivyFinding {
   severity: string; // CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN
   title: string;
   target: string | null;
+  /** Evidencia de código (issues de Sonar): líneas ±N de la señalada. Texto plano. */
+  evidence?: { line: number; code: string }[];
 }
 
 // ─── Reviewer IA (F6, ADR-007) ──────────────────────────────────────────────
