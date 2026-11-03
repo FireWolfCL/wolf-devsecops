@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-do
 
 import { RequireAuth, RequireRole } from "./auth/guards";
 import { About } from "./pages/About";
+import { Plans } from "./pages/Plans";
 import { AdminLayout } from "./components/AdminLayout";
 import { Layout } from "./components/Layout";
 import { Herramientas } from "./pages/Herramientas";
@@ -72,6 +73,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/plans" element={<Plans />} />
       <Route
         element={
           <RequireAuth>

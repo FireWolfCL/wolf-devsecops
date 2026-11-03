@@ -604,6 +604,33 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .about-link { display: inline-block; margin-top: 8px; }
 .about-foot { margin-top: 24px; font-size: 12px; }
 
+/* ── Indicadores Pro ──────────────────────────────────────────────────────── */
+.pro-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .5px;
+  color: var(--bg); background: var(--accent); border-radius: 5px; padding: 2px 6px; }
+.pro-notice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ── Comparativa de planes ────────────────────────────────────────────────── */
+.plans { max-width: 960px; margin: 32px auto; padding: 0 16px; }
+.plans-head { text-align: center; margin-bottom: 22px; }
+.plans-mark { display: inline-block; width: 54px; height: 54px; background-color: var(--accent);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 50%, transparent)); }
+.plans-head h1 { margin: 10px 0 4px; font-size: 26px; }
+.plans-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+.plans-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.plans-table th, .plans-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+.plans-table thead th { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+.plans-table thead th:not(:first-child) { text-align: center; width: 20%; }
+.plans-table td:not(:first-child) { text-align: center; }
+.plan-you { display: block; font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.plan-cat td { background: var(--bg); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.plan-current { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.plan-yes { color: var(--accent); font-weight: 700; }
+.plan-no { color: var(--muted); }
+.plan-val { font-size: 13px; }
+.plans-foot { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 18px; font-size: 12px; }
+
 /* Selector de idioma en el header */
 .lang-switcher { background: var(--surface); color: var(--text); border: 1px solid var(--border);
   border-radius: 8px; padding: 5px 8px; font-size: 13px; cursor: pointer; }

@@ -14,6 +14,7 @@ import { fetchSourceDetail, proposeCodeFix } from "../api/client";
 import { settingsApi } from "../api/admin";
 import { ApiError } from "../api/http";
 import type { AICodeFixResult, AIProviderKind, TrivyFinding } from "../api/types";
+import { ProNotice } from "../components/Pro";
 import { useAuth } from "../auth/AuthContext";
 import { useAsync, useMeta } from "../hooks";
 import { useT } from "../i18n";
@@ -282,11 +283,7 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
             {provider === "hosted" ? t("cr.hostedWarn") : t("cr.localHint")}
           </p>
           {!aiEnabled && <p className="state">{t("ai.disabledState")}</p>}
-          {aiEnabled && !isProCodefix && (
-            <div className="alert info" role="status">
-              <strong>{t("cr.proFeature")}</strong> <span className="badge off">PRO</span>
-            </div>
-          )}
+          {aiEnabled && !isProCodefix && <ProNotice msg={t("cr.proFeature")} />}
           {selected ? (
             <p className="muted" style={{ fontSize: 13 }}>
               {t("cr.selected", { id: selectedRef ?? "—" })}
@@ -299,7 +296,7 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
           {busy && <p className="state" aria-busy="true">{t("ai.loading")}</p>}
 
           {/* Estados esperados (no errores rotos). */}
-          {failure?.kind === "402" && <div className="alert info" role="status"><strong>{t("cr.proFeature")}</strong> <span className="badge off">PRO</span></div>}
+          {failure?.kind === "402" && <ProNotice msg={t("cr.proFeature")} />}
           {failure?.kind === "403" && <div className="alert info" role="status"><strong>{t("cr.err403")}</strong></div>}
           {failure?.kind === "503" && <div className="alert info" role="status"><strong>{t("cr.err503")}</strong></div>}
           {failure?.kind === "404" && (

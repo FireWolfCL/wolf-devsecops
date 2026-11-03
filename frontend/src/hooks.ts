@@ -51,6 +51,13 @@ export function useMeta(): AsyncState<Meta> {
   return useAsync(fetchMeta, []);
 }
 
+/** ¿La feature premium (edición) está activa? El backend es la autoridad; esto
+ *  es para mostrar/ocultar y poner "Pro"/"Ver planes" en la UI. */
+export function useFeature(feature: string): boolean {
+  const { data } = useMeta();
+  return data?.features?.includes(feature) ?? false;
+}
+
 export function usePosture(): AsyncState<PostureOverview> {
   return useAsync(fetchPosture, []);
 }

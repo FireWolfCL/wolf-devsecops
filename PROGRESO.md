@@ -1,6 +1,6 @@
 # PROGRESO — Wolf DevSecOps · Monetización (Community → Pro/Enterprise)
 
-**Última actualización:** 2026-11-03 · **Global: 36%**
+**Última actualización:** 2026-11-03 · **Global: 44%**
 
 Pipeline para separar Community (gratis, source-available) de Pro/Enterprise.
 Enfoque: *edition-flag primero* (WOLF_EDITION), licencia firmada WLA después.
@@ -46,8 +46,10 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
 - ⬜ Expiración → degradación grácil a Community + aviso previo
 - ⬜ Emisión de licencias desde la WLA (Wolf-Licenses)
 
-## Fase E5 — Frontend upgrade UX (peso 2) — 40%
-- 🔄 Badges "Pro" en features bloqueadas (AI code-fix y PR-draft hechos; faltan otras)
-- ✅ Manejo de 402 (AI code-fix muestra aviso Pro; botón PR oculto en Community)
-- ⬜ Vista comparativa de planes (pricing)
-- ⬜ Prompts de upgrade consistentes en todas las features gated
+## Fase E5 — Frontend upgrade UX (peso 2) — 100%
+- ✅ Hook `useFeature` + componentes `ProBadge`/`ProNotice` (reutilizables)
+- ✅ Vista comparativa de planes `/plans` (resalta el plan actual), enlazada
+     desde About y el login
+- ✅ Manejo de 402 (AI code-fix muestra aviso Pro + "Ver planes"; botón PR
+     oculto en Community)
+- ✅ Badges "Pro" en las features gated principales (code-fix, PR-draft)

@@ -2,7 +2,7 @@
 // Banderas must_change_password / must_enroll_mfa: se resuelven en /profile.
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import wolfHead from "../assets/wolf-head.svg";
 import { useAuth } from "../auth/AuthContext";
@@ -118,6 +118,7 @@ export function Login() {
       <footer className="auth-foot">
         <span className="muted">© Wolf Industries</span>
         <ExtLink href="https://wolf-industries.tech" className="ext-link sm">wolf-industries.tech</ExtLink>
+        <Link to="/plans" className="ext-link sm">{t("pro.seePlans")}</Link>
         {ver && <span className="muted mono">v{ver.current_version}</span>}
       </footer>
     </div>

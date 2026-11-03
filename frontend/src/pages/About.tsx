@@ -1,6 +1,8 @@
 // About / reconocimiento (admin). Branding de Wolf Industries, el developer y la
 // versión en ejecución. Todo es estático salvo la versión (del backend). El enlace
 // externo pasa por ExtLink (https, rel noopener).
+import { Link } from "react-router-dom";
+
 import wolfHead from "../assets/wolf-head.svg";
 import { updatesApi } from "../api/admin";
 import { ExtLink } from "../components/util";
@@ -28,6 +30,7 @@ export function About() {
           <p className="about-ver mono">
             {t("about.version")} {ver?.current_version ?? "—"}
           </p>
+          <Link to="/plans" className="ext-link sm about-link">{t("pro.seePlans")}</Link>
         </div>
       </header>
 
