@@ -1,6 +1,6 @@
 # PROGRESO — Wolf DevSecOps · Monetización (Community → Pro/Enterprise)
 
-**Última actualización:** 2026-11-03 · **Global: 19%**
+**Última actualización:** 2026-11-03 · **Global: 36%**
 
 Pipeline para separar Community (gratis, source-available) de Pro/Enterprise.
 Enfoque: *edition-flag primero* (WOLF_EDITION), licencia firmada WLA después.
@@ -19,14 +19,15 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
 - ✅ Badge en About + login re-brandeado
 - ✅ Test de `edition.py` + fixture de edición en conftest
 
-## Fase E1 — Gates sobre features existentes (peso 3) — 33%
-- ✅ AI code-fix (Feature B) → Pro
-- ✅ PR-draft / branch (Feature D) → Pro
-- ⬜ Notificaciones externas (Telegram/email/bot) → Pro
-- ⬜ Scheduler (snapshots periódicos) → Pro
-- ⬜ IA hosted (proveedores de pago) → Pro
-- ⬜ Límite multi-org en Community (1 org) — enforce en create/import
-- ⬜ Ventana de historial (30d Community / ilimitado Pro)
+## Fase E1 — Gates sobre features existentes (peso 3) — 100%
+- ✅ AI code-fix (Feature B) → Pro (402 + reviewer local teaser Community)
+- ✅ PR-draft / branch (Feature D) → Pro (botón oculto en Community)
+- ✅ Notificaciones externas (Telegram/email/bot) → Pro (gate en _has_channel)
+- ✅ Scheduler → snapshots en Community (alimentan campana/historial, base);
+     el envío externo es lo Pro (cubierto por el gate de notificaciones)
+- ✅ IA hosted → cubierto: code-fix es Pro; el reviewer Community es local
+- ✅ Límite multi-org en Community (1 org) — enforce en import-org
+- ✅ Ventana de historial (30d Community / ilimitado Pro)
 
 ## Fase E2 — Features nuevas de Pro (peso 4) — 0%
 - ⬜ SSO / LDAP / Active Directory (reciclar de otros proyectos Wolf)
@@ -45,7 +46,8 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
 - ⬜ Expiración → degradación grácil a Community + aviso previo
 - ⬜ Emisión de licencias desde la WLA (Wolf-Licenses)
 
-## Fase E5 — Frontend upgrade UX (peso 2) — 0%
-- ⬜ Badges "Pro" en features bloqueadas
-- ⬜ Prompts de upgrade + manejo de 402
+## Fase E5 — Frontend upgrade UX (peso 2) — 40%
+- 🔄 Badges "Pro" en features bloqueadas (AI code-fix y PR-draft hechos; faltan otras)
+- ✅ Manejo de 402 (AI code-fix muestra aviso Pro; botón PR oculto en Community)
 - ⬜ Vista comparativa de planes (pricing)
+- ⬜ Prompts de upgrade consistentes en todas las features gated

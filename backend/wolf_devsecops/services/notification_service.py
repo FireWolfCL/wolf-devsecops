@@ -19,6 +19,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..edition import FEATURE_NOTIFICATIONS, is_enabled
 from ..models_db.config import SourceConfigRow, SystemConfigRow
 from ..models_db.events import ProjectEvent
 from ..settings import Settings
@@ -31,6 +32,11 @@ _REMINDER_MARKER = "token_reminder_last"  # SystemConfigRow: {source: iso del ú
 
 
 def _has_channel(settings: Settings) -> bool:
+    # El envío EXTERNO de alertas (Telegram/email/bot) es feature Pro. En Community
+    # la campana in-app + Novedades siguen funcionando (son base); solo no sale nada
+    # por canales externos. Las novedades quedan pendientes y se despachan si sube a Pro.
+    if not is_enabled(FEATURE_NOTIFICATIONS):
+        return False
     return bool(settings.telegram_bot_token and settings.telegram_chat_id) or bool(
         settings.smtp_host and settings.notify_email_to
     )

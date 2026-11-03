@@ -400,6 +400,12 @@ async def project_exists(session: AsyncSession, key: str) -> bool:
     return (await session.get(ProjectRow, key)) is not None
 
 
+async def distinct_orgs(session: AsyncSession) -> set[str]:
+    """Organizaciones distintas con al menos un proyecto (para el límite por edición)."""
+    rows = (await session.execute(select(ProjectRow.org).distinct())).scalars()
+    return {o for o in rows if o}
+
+
 async def get_project_view(session: AsyncSession, key: str) -> dict | None:
     """Proyecto + su sub-config por fuente (incluye deshabilitados). None si no existe."""
     pr = await session.get(ProjectRow, key)

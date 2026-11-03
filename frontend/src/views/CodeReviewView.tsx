@@ -39,10 +39,11 @@ function refOf(f: TrivyFinding): string | null {
   return f.id ?? (f.title || null);
 }
 
-type Failure = { kind: "403" | "503" | "404" | "422" | "other"; msg: string };
+type Failure = { kind: "402" | "403" | "503" | "404" | "422" | "other"; msg: string };
 
 function toFailure(e: unknown): Failure {
   if (e instanceof ApiError) {
+    if (e.status === 402) return { kind: "402", msg: e.message };
     if (e.status === 403) return { kind: "403", msg: e.message };
     if (e.status === 503) return { kind: "503", msg: e.message };
     if (e.status === 404) return { kind: "404", msg: e.message };
@@ -109,6 +110,8 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
   const { user } = useAuth();
   const { data: meta } = useMeta();
   const aiEnabled = meta?.ai_enabled ?? false;
+  // Feature Pro (edición): la propuesta de fix con código. El reviewer local es teaser.
+  const isProCodefix = meta?.features?.includes("ai.codefix") ?? false;
 
   const dd = useAsync(() => fetchSourceDetail(projectKey, "defectdojo"), [projectKey]);
   const sq = useAsync(() => fetchSourceDetail(projectKey, "sonarqube"), [projectKey]);
@@ -160,7 +163,7 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
   const selectedSource = selIdx !== null ? items[selIdx]?.source : undefined;
   const selectedRef = selected ? refOf(selected) : null;
   const model = provider === "hosted" ? hostedModel : localModel.trim();
-  const canRun = aiEnabled && !busy && !!selectedRef && !!selected?.target && model.length > 0;
+  const canRun = aiEnabled && isProCodefix && !busy && !!selectedRef && !!selected?.target && model.length > 0;
 
   async function run() {
     if (!selectedRef || !selectedSource) return;
@@ -279,6 +282,11 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
             {provider === "hosted" ? t("cr.hostedWarn") : t("cr.localHint")}
           </p>
           {!aiEnabled && <p className="state">{t("ai.disabledState")}</p>}
+          {aiEnabled && !isProCodefix && (
+            <div className="alert info" role="status">
+              <strong>{t("cr.proFeature")}</strong> <span className="badge off">PRO</span>
+            </div>
+          )}
           {selected ? (
             <p className="muted" style={{ fontSize: 13 }}>
               {t("cr.selected", { id: selectedRef ?? "—" })}
@@ -291,6 +299,7 @@ export function CodeReviewView({ projectKey, onBack }: { projectKey: string; onB
           {busy && <p className="state" aria-busy="true">{t("ai.loading")}</p>}
 
           {/* Estados esperados (no errores rotos). */}
+          {failure?.kind === "402" && <div className="alert info" role="status"><strong>{t("cr.proFeature")}</strong> <span className="badge off">PRO</span></div>}
           {failure?.kind === "403" && <div className="alert info" role="status"><strong>{t("cr.err403")}</strong></div>}
           {failure?.kind === "503" && <div className="alert info" role="status"><strong>{t("cr.err503")}</strong></div>}
           {failure?.kind === "404" && (

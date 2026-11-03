@@ -46,6 +46,16 @@ def test_history_window_segun_edicion():
     assert edition.history_window_days() is None
 
 
+def test_org_allowed_community_una_sola_org():
+    s = get_settings()
+    s.edition = edition.COMMUNITY
+    assert edition.org_allowed(set(), "Wolf")          # 1ª org
+    assert edition.org_allowed({"Wolf"}, "Wolf")       # re-usar la misma
+    assert not edition.org_allowed({"Wolf"}, "lsst-it")  # 2ª org → bloqueada
+    s.edition = edition.PRO
+    assert edition.org_allowed({"Wolf"}, "lsst-it")    # Pro: multi-org
+
+
 def test_require_feature_402_en_community_y_ok_en_pro():
     s = get_settings()
     dep = edition.require_feature(edition.FEATURE_AI_CODEFIX)

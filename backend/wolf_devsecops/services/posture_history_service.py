@@ -6,11 +6,12 @@ Reusa `core.posture.score_project` (lo mismo que alimenta el panel).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import edition
 from ..core.aggregator import Aggregator
 from ..core.config import AppConfig
 from ..core.posture import score_project
@@ -84,8 +85,16 @@ async def capture_snapshots(
 async def list_history(
     session: AsyncSession, project_key: str, limit: int | None = None
 ) -> list[PostureSnapshotRow]:
-    """Serie ascendente por captured_at. Con `limit`, las N más RECIENTES (aun así ascendentes)."""
+    """Serie ascendente por captured_at. Con `limit`, las N más RECIENTES (aun así ascendentes).
+
+    Ventana por edición (feature Pro `history.unlimited`): en Community solo se
+    devuelven los snapshots de los últimos N días; Pro/Enterprise = ilimitado.
+    """
     q = select(PostureSnapshotRow).where(PostureSnapshotRow.project_key == project_key)
+    window_days = edition.history_window_days()
+    if window_days is not None:
+        cutoff = datetime.now(UTC) - timedelta(days=window_days)
+        q = q.where(PostureSnapshotRow.captured_at >= cutoff)
     if limit is not None:
         q = q.order_by(PostureSnapshotRow.captured_at.desc()).limit(limit)
         rows = list((await session.execute(q)).scalars())

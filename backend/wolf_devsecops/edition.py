@@ -100,6 +100,15 @@ def history_window_days() -> int | None:
     return None if is_enabled(FEATURE_HISTORY_UNLIMITED) else COMMUNITY_HISTORY_DAYS
 
 
+def org_allowed(existing_orgs: set[str], new_org: str) -> bool:
+    """¿Usar `new_org` respeta el límite de organizaciones de la edición actual?
+    None = ilimitado (Pro+); Community = 1. No penaliza re-usar una org existente."""
+    limit = limits_for(current_edition())["max_orgs"]
+    if limit is None:
+        return True
+    return len(set(existing_orgs) | {new_org}) <= limit
+
+
 def require_feature(feature: str):
     """Dependency de FastAPI: 402 (Payment Required) si la feature no está en la
     edición actual. El mensaje es apto para el usuario (sin filtrar nada sensible)."""

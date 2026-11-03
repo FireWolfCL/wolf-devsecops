@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { fetchSourceDetail } from "../api/client";
 import type { RemediationPick, TrivyFinding } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
-import { useAsync } from "../hooks";
+import { useAsync, useMeta } from "../hooks";
 import { useT, type TFn } from "../i18n";
 import { MAX_PICKS, RemediationBranchModal } from "./RemediationBranchModal";
 
@@ -120,8 +120,11 @@ export function FindingsDetail({
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [showPlan, setShowPlan] = useState(false);
   const { user } = useAuth();
-  // Solo ergonomía: el servidor (operator/admin) es la autoridad.
+  const { data: meta } = useMeta();
+  // Solo ergonomía: el servidor (operator/admin + edición) es la autoridad.
   const canWrite = user?.role === "operator" || user?.role === "admin";
+  // El PR-draft/branch es feature Pro (edición); en Community se oculta el botón.
+  const isProPR = meta?.features?.includes("remediation.pr") ?? false;
   const [showBranch, setShowBranch] = useState(false);
   const [writeDisabled, setWriteDisabled] = useState(false);
 
@@ -181,7 +184,7 @@ export function FindingsDetail({
           >
             {t("remediate.button")} ({sel.size})
           </button>
-          {canWrite && (
+          {canWrite && isProPR && (
             <span title={writeDisabled ? t("rbr.disabledTip") : sel.size > MAX_PICKS ? t("rbr.tooMany", { max: MAX_PICKS }) : undefined}>
               <button
                 type="button"
@@ -242,7 +245,7 @@ export function FindingsDetail({
         <RemediationPlan projectKey={projectKey} picked={picked} t={t} />
       )}
 
-      {selectable && canWrite && showBranch && picks.length > 0 && (
+      {selectable && canWrite && isProPR && showBranch && picks.length > 0 && (
         <RemediationBranchModal
           projectKey={projectKey}
           picks={picks}

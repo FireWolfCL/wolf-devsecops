@@ -17,6 +17,7 @@ import httpx
 import typer
 from sqlalchemy import select
 
+from .. import edition
 from ..core.credentials import resolve_token
 from ..db.engine import dispose_engine, get_sessionmaker
 from ..models_db.config import SourceConfigRow
@@ -85,6 +86,14 @@ def import_org(
                 token = (
                     resolve_token(gh.token_env, gh.token_cipher) if gh else None
                 ) or os.environ.get("GITHUB_TOKEN", "")
+                # Límite de organizaciones por edición (Community = 1). multi-org es Pro.
+                if not dry_run:
+                    existing = await config_service.distinct_orgs(session)
+                    if not edition.org_allowed(existing, org):
+                        raise RuntimeError(
+                            f"La edición actual ({edition.current_edition()}) permite 1 organización. "
+                            f"Importar '{org}' agregaría otra; multi-org es una función Pro."
+                        )
                 repos = await _list_repos(org, cutoff, token)
                 if limit:
                     repos = repos[:limit]
