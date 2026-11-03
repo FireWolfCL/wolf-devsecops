@@ -1,6 +1,6 @@
 # PROGRESO — Wolf DevSecOps · Monetización (Community → Pro/Enterprise)
 
-**Última actualización:** 2026-11-03 · **Global: 44%**
+**Última actualización:** 2026-11-03 · **Global: 63%**
 
 Pipeline para separar Community (gratis, source-available) de Pro/Enterprise.
 Enfoque: *edition-flag primero* (WOLF_EDITION), licencia firmada WLA después.
@@ -41,10 +41,13 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
 - ⬜ Multi-tenant aislado
 - ⬜ SCIM / roles custom / row-level por org
 
-## Fase E4 — Licencia WLA (fase 2 enforcement) (peso 3) — 0%
-- ⬜ Verificación de licencia firmada (ES256/JWS) al arranque
-- ⬜ Expiración → degradación grácil a Community + aviso previo
-- ⬜ Emisión de licencias desde la WLA (Wolf-Licenses)
+## Fase E4 — Licencia WLA (fase 2 enforcement) (peso 3) — 100%
+- ✅ Verificación de licencia firmada (ES256/JWS) con llave pública embebida
+     (`licensing/`); la licencia válida MANDA sobre el flag (precedencia).
+- ✅ Expiración → degradación grácil (licencia vencida/inválida → flag/community)
+     + aviso en About (vence en N días / vencida). `license_required` para prod.
+- ✅ Emisión desde la WLA: CLI `issue-license` (firma con la llave privada que
+     vive en tu WLA; la PÚBLICA va al repo, la PRIVADA nunca).
 
 ## Fase E5 — Frontend upgrade UX (peso 2) — 100%
 - ✅ Hook `useFeature` + componentes `ProBadge`/`ProNotice` (reutilizables)

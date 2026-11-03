@@ -8,6 +8,7 @@ from .bot import bot
 from .create_admin import create_admin
 from .import_org import import_org
 from .init import run_init
+from .issue_license import issue_license
 from .notify import notify
 from .scheduler import scheduler
 from .snapshot_posture import snapshot_posture
@@ -29,6 +30,8 @@ app.command(name="scheduler")(scheduler)
 app.command(name="bot")(bot)
 # Alta masiva de los repos ACTIVOS de una organización GitHub.
 app.command(name="import-org")(import_org)
+# Emisión de licencias firmadas (lado WLA; requiere la llave privada).
+app.command(name="issue-license")(issue_license)
 
 
 @app.command()

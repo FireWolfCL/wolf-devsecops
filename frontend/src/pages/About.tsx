@@ -17,6 +17,8 @@ export function About() {
   const { data: meta } = useMeta();
   const edition = meta?.edition ?? "community";
   const editionLabel = edition.charAt(0).toUpperCase() + edition.slice(1);
+  const lic = meta?.license;
+  const licClass = lic?.valid ? (lic.days_left != null && lic.days_left <= 14 ? "warn" : "ok") : "err";
 
   return (
     <div className="about">
@@ -30,6 +32,13 @@ export function About() {
           <p className="about-ver mono">
             {t("about.version")} {ver?.current_version ?? "—"}
           </p>
+          {lic?.present && (
+            <p className={`about-lic ${licClass}`}>
+              {lic.valid
+                ? t("about.license.active", { customer: lic.customer ?? "—", days: lic.days_left ?? "—" })
+                : lic.error === "expired" ? t("about.license.expired") : t("about.license.invalid")}
+            </p>
+          )}
           <Link to="/plans" className="ext-link sm about-link">{t("pro.seePlans")}</Link>
         </div>
       </header>

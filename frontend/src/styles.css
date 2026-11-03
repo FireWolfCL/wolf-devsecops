@@ -602,6 +602,10 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .about-brand, .about-dev { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
 .about-dev { color: var(--accent); }
 .about-link { display: inline-block; margin-top: 8px; }
+.about-lic { margin: 6px 0 0; font-size: 13px; font-family: var(--mono); }
+.about-lic.ok { color: var(--accent); }
+.about-lic.warn { color: var(--warn); }
+.about-lic.err { color: var(--danger, #f87171); }
 .about-foot { margin-top: 24px; font-size: 12px; }
 
 /* ── Indicadores Pro ──────────────────────────────────────────────────────── */

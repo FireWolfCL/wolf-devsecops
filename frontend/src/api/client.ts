@@ -76,6 +76,15 @@ export interface Meta {
   edition?: string; // community | pro | enterprise
   features?: string[];
   limits?: { max_projects: number | null; max_orgs: number | null };
+  license?: {
+    present: boolean;
+    valid: boolean;
+    edition?: string;
+    customer?: string;
+    expires_at?: string | null;
+    days_left?: number | null;
+    error?: string | null; // invalid_signature | expired | wrong_product
+  };
 }
 
 export function fetchMeta(): Promise<Meta> {

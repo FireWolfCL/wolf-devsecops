@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
+from . import licensing
 from .settings import get_settings
 
 COMMUNITY = "community"
@@ -74,8 +75,15 @@ def normalize(edition: str | None) -> str:
 
 
 def current_edition() -> str:
-    """Edición efectiva del despliegue (fase 1: desde el entorno)."""
-    return normalize(get_settings().edition)
+    """Edición efectiva del despliegue. Precedencia: licencia firmada VÁLIDA (WLA)
+    > flag WOLF_EDITION (salvo que license_required). Ausente/ inválida → community."""
+    settings = get_settings()
+    lic = licensing.effective_edition(settings)
+    if lic is not None:
+        return normalize(lic)
+    if settings.license_required:
+        return COMMUNITY
+    return normalize(settings.edition)
 
 
 def features_for(edition: str) -> frozenset[str]:

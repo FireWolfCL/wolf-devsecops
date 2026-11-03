@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # firmada por la WLA. Un valor inválido degrada a community (ver edition.py).
     edition: str = "community"
 
+    # Licencia firmada (fase 2). WOLF_LICENSE = token JWS o "@/ruta/al/archivo".
+    # Si está presente y es válida, DETERMINA la edición. `license_required`=true
+    # ignora el flag WOLF_EDITION (solo una licencia concede Pro; para producción).
+    license: str = ""
+    license_required: bool = False
+
     # Ruta al archivo de proyectos/fuentes (semilla de bootstrap YAML→BD, ADR-015).
     config_path: str = "config/projects.yaml"
 

@@ -4,22 +4,24 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from .. import __version__, edition
+from .. import __version__, edition, licensing
 from ..core.config import AppConfig, ConfigError
 from ..services import config_service
+from ..settings import get_settings
 from .deps import get_config
 
 router = APIRouter()
 
 
 def _edition_block() -> dict:
-    """Edición efectiva + features/límites, para que el frontend muestre/oculte y
-    ponga los 'Upgrade'. Es informativo; el BACKEND es la autoridad del gate."""
+    """Edición efectiva + features/límites + estado de licencia, para que el frontend
+    muestre/oculte y ponga los 'Upgrade'. Es informativo; el BACKEND es la autoridad."""
     ed = edition.current_edition()
     return {
         "edition": ed,
         "features": sorted(edition.features_for(ed)),
         "limits": edition.limits_for(ed),
+        "license": licensing.status(get_settings()),
     }
 
 
