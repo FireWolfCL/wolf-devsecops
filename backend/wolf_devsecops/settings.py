@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     # ── Notificaciones (item M). Canales opcionales: si el token/host está vacío,
     #    ese canal se omite. El scheduler corre snapshot + dispatch cada intervalo.
     snapshot_interval_seconds: int = 3600  # WOLF_SNAPSHOT_INTERVAL_SECONDS
+    # Retención del audit trail en días (feature Pro `audit.export`). 0 = sin purga.
+    # El scheduler borra lo más viejo cada ciclo si la edición lo permite.
+    audit_retention_days: int = 0
     notify_lang: str = "es"  # idioma de los mensajes salientes (es|en)
     notify_min_severity: str = "good"  # info|good|warn|danger — umbral mínimo (good = incluye mejoras)
     # Telegram (push + bot de estatus). Token de @BotFather, chat/grupo destino.

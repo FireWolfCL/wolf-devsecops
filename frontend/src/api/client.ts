@@ -1,5 +1,6 @@
 // Cliente del dashboard. El navegador solo habla con /api (nunca ve tokens de
 // fuentes). Todas las llamadas pasan por api/http.ts (Bearer + manejo 401/403).
+import { tokenStorage } from "../auth/tokenStorage";
 import { ApiError, request } from "./http";
 import type {
   AICodeFixResult,
@@ -111,6 +112,23 @@ export async function reviewProjectAI(key: string): Promise<AIReviewResult> {
 
 // Feature B. 403/503/404/422 llegan como ApiError (status); la vista los trata
 // como estados esperados. Ni base_url ni token viajan: el backend los resuelve.
+// Export del audit trail (feature Pro). Descarga autenticada vía blob (el endpoint
+// responde con Content-Disposition). 402 si la edición no incluye audit.export.
+export async function downloadAudit(format: "json" | "csv"): Promise<void> {
+  const token = tokenStorage.get();
+  const res = await fetch(`/api/v1/audit/export?format=${format}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `audit.${format}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function proposeCodeFix(
   key: string,
   body: { finding_ref: string; provider: AIProviderKind; model: string; source?: "defectdojo" | "sonarqube" },

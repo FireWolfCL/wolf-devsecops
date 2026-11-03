@@ -15,10 +15,16 @@ import logging
 
 import typer
 
+from .. import edition
 from ..core.aggregator import Aggregator
 from ..core.cache import TTLCache
 from ..db.engine import dispose_engine, get_sessionmaker
-from ..services import config_service, notification_service, posture_history_service
+from ..services import (
+    audit_service,
+    config_service,
+    notification_service,
+    posture_history_service,
+)
 from ..settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -38,6 +44,12 @@ async def _cycle() -> tuple[int, dict]:
     async with sm() as session:
         rem = await notification_service.check_token_expiry(session, settings)
     disp["token_reminders"] = rem.get("reminded", 0)
+    # Retención de auditoría (feature Pro): purga lo más viejo si la edición lo permite.
+    if edition.is_enabled(edition.FEATURE_AUDIT_EXPORT) and settings.audit_retention_days > 0:
+        async with sm() as session:
+            disp["audit_purged"] = await audit_service.purge_old(
+                session, settings.audit_retention_days
+            )
     return written, disp
 
 

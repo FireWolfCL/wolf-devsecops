@@ -1,6 +1,6 @@
 # PROGRESO — Wolf DevSecOps · Monetización (Community → Pro/Enterprise)
 
-**Última actualización:** 2026-11-03 · **Global: 63%**
+**Última actualización:** 2026-11-03 · **Global: 68%**
 
 Pipeline para separar Community (gratis, source-available) de Pro/Enterprise.
 Enfoque: *edition-flag primero* (WOLF_EDITION), licencia firmada WLA después.
@@ -29,11 +29,11 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
 - ✅ Límite multi-org en Community (1 org) — enforce en import-org
 - ✅ Ventana de historial (30d Community / ilimitado Pro)
 
-## Fase E2 — Features nuevas de Pro (peso 4) — 0%
+## Fase E2 — Features nuevas de Pro (peso 4) — 20%
 - ⬜ SSO / LDAP / Active Directory (reciclar de otros proyectos Wolf)
 - ⬜ Reportes programados (envío automático)
 - ⬜ Reporte de cumplimiento (mapeo ISO/CIS, PDF)
-- ⬜ Export + retención de auditoría
+- ✅ Export + retención de auditoría (endpoint gated + tab Admin + purga en scheduler)
 - ⬜ Canal de updates firmado
 
 ## Fase E3 — Enterprise (peso 2) — 0%

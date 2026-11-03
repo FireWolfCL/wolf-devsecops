@@ -11,6 +11,7 @@ const ADMIN_TABS = [
   { to: "/admin/settings", label: "admin.tab.settings" },
   { to: "/admin/ai", label: "admin.tab.ai" },
   { to: "/admin/updates", label: "admin.tab.updates" },
+  { to: "/admin/audit", label: "admin.tab.audit" },
   { to: "/admin/about", label: "admin.tab.about" },
 ];
 

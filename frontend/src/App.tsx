@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-do
 
 import { RequireAuth, RequireRole } from "./auth/guards";
 import { About } from "./pages/About";
+import { Audit } from "./pages/Audit";
 import { Plans } from "./pages/Plans";
 import { AdminLayout } from "./components/AdminLayout";
 import { Layout } from "./components/Layout";
@@ -98,6 +99,7 @@ export function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="ai" element={<AIConfig />} />
           <Route path="updates" element={<UpdateCenter />} />
+          <Route path="audit" element={<Audit />} />
           <Route path="about" element={<About />} />
         </Route>
       </Route>
