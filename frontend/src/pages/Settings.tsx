@@ -112,9 +112,10 @@ function parseSources(text: string, t: TFn): ProjectSourcesConfig {
 }
 
 function ProjectForm({
-  initial, onDone, onCancel,
+  initial, orgs, onDone, onCancel,
 }: {
   initial: ProjectCfgOut | null; // null = crear
+  orgs: string[]; // organizaciones ya existentes (para el datalist de agrupación)
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -122,6 +123,7 @@ function ProjectForm({
   const editing = initial !== null;
   const [key, setKey] = useState(initial?.key ?? "");
   const [name, setName] = useState(initial?.name ?? "");
+  const [org, setOrg] = useState(initial?.org ?? "");
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [sourcesText, setSourcesText] = useState(initial ? JSON.stringify(initial.sources, null, 2) : "");
   const [busy, setBusy] = useState(false);
@@ -136,16 +138,17 @@ function ProjectForm({
     } catch (err) {
       return setError(errText(err));
     }
+    const orgVal = org.trim() || null; // vacío = default/actual en el backend
     setBusy(true);
     try {
       if (initial) {
-        await settingsApi.updateProject(initial.key, { key: initial.key, name: name.trim(), sources, enabled });
+        await settingsApi.updateProject(initial.key, { key: initial.key, name: name.trim(), org: orgVal, sources, enabled });
       } else {
-        await settingsApi.createProject({ key: key.trim(), name: name.trim(), sources, enabled });
+        await settingsApi.createProject({ key: key.trim(), name: name.trim(), org: orgVal, sources, enabled });
       }
       onDone();
     } catch (err) {
-      setError(errText(err)); // 409 clave duplicada / 404 / 422
+      setError(errText(err)); // 409 clave duplicada / 404 / 422 / 402 multi-org Pro
     } finally {
       setBusy(false);
     }
@@ -162,6 +165,14 @@ function ProjectForm({
       <div className="field">
         <label htmlFor="pj-name">{t("common.name")}</label>
         <input id="pj-name" type="text" required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="pj-org">{t("settings.org")}</label>
+        <input id="pj-org" type="text" list="pj-org-list" maxLength={100} placeholder="Wolf" value={org} onChange={(e) => setOrg(e.target.value)} />
+        <datalist id="pj-org-list">
+          {orgs.map((o) => <option key={o} value={o} />)}
+        </datalist>
+        <span className="hint">{t("settings.orgHint")}</span>
       </div>
       <div className="field">
         <label htmlFor="pj-src">{t("settings.sourcesJson")}</label>
@@ -199,6 +210,7 @@ function ProjectsSection() {
 
   const editing = data?.find((p) => p.key === form) ?? null;
   const done = () => { setForm("none"); reload(); };
+  const orgs = [...new Set((data ?? []).map((p) => p.org).filter(Boolean))].sort();
 
   return (
     <section className="section">
@@ -206,8 +218,8 @@ function ProjectsSection() {
         <h2 style={{ margin: 0 }}>{t("settings.projects")}</h2>
         {form === "none" && <button className="btn primary" onClick={() => setForm("new")}>{t("settings.newProject")}</button>}
       </div>
-      {form === "new" && <ProjectForm initial={null} onDone={done} onCancel={() => setForm("none")} />}
-      {editing && <ProjectForm key={editing.key} initial={editing} onDone={done} onCancel={() => setForm("none")} />}
+      {form === "new" && <ProjectForm initial={null} orgs={orgs} onDone={done} onCancel={() => setForm("none")} />}
+      {editing && <ProjectForm key={editing.key} initial={editing} orgs={orgs} onDone={done} onCancel={() => setForm("none")} />}
       {actionError && <div className="alert err" role="alert">{actionError}</div>}
       {loading && !data && <p className="state">{t("settings.loadingProjects")}</p>}
       {error && <div className="alert err" role="alert">{error}</div>}
@@ -215,12 +227,13 @@ function ProjectsSection() {
       {data && data.length > 0 && (
         <div className="table-wrap">
           <table className="table-static">
-            <thead><tr><th>{t("settings.colKey")}</th><th>{t("common.name")}</th><th>{t("settings.sources")}</th><th>{t("common.colState")}</th><th>{t("common.colActions")}</th></tr></thead>
+            <thead><tr><th>{t("settings.colKey")}</th><th>{t("common.name")}</th><th>{t("settings.colOrg")}</th><th>{t("settings.sources")}</th><th>{t("common.colState")}</th><th>{t("common.colActions")}</th></tr></thead>
             <tbody>
               {data.map((p) => (
                 <tr key={p.key}>
                   <td className="mono">{p.key}</td>
                   <td>{p.name}</td>
+                  <td>{p.org}</td>
                   <td className="mono">{Object.keys(p.sources).join(", ") || "—"}</td>
                   <td><span className={`badge ${p.enabled ? "ok" : "off"}`}>{p.enabled ? t("settings.projEnabled") : t("settings.projDisabled")}</span></td>
                   <td>

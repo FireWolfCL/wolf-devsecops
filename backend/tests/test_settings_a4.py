@@ -125,6 +125,35 @@ async def test_project_create_conflict_and_validation(env):
                          json={"key": "../x", "name": "n"})).status_code == 422
 
 
+async def test_project_org_roundtrip_and_multiorg_gate(env):
+    """`org` viaja en create/update y el límite de 1 org en Community devuelve 402."""
+    c, h = env
+    a = h["admin"]
+    settings = get_settings()
+    # Crear con org explícita: se persiste y vuelve en el GET.
+    r = await c.post(f"{S}/projects", headers=a,
+                     json={"key": "o1", "name": "O1", "org": "Acme", "sources": {}})
+    assert r.status_code == 201
+    assert r.json()["org"] == "Acme"
+    assert (await c.get(f"{S}/projects/o1", headers=a)).json()["org"] == "Acme"
+    # Sin org → default "Wolf" (segunda org, pero enterprise lo permite).
+    r = await c.post(f"{S}/projects", headers=a, json={"key": "o2", "name": "O2", "sources": {}})
+    assert r.status_code == 201 and r.json()["org"] == "Wolf"
+    # Re-asignar org existente nunca penaliza, ni siquiera en Community.
+    prev = settings.edition
+    settings.edition = "community"
+    try:
+        r = await c.put(f"{S}/projects/o2", headers=a,
+                        json={"name": "O2", "org": "Acme", "sources": {}})
+        assert r.status_code == 200 and r.json()["org"] == "Acme"
+        # Una TERCERA org nueva en Community → 402 (función Pro).
+        r = await c.post(f"{S}/projects", headers=a,
+                         json={"key": "o3", "name": "O3", "org": "Globex", "sources": {}})
+        assert r.status_code == 402
+    finally:
+        settings.edition = prev
+
+
 async def test_token_value_never_leaves_only_token_present(env):
     c, h = env
     a = h["admin"]

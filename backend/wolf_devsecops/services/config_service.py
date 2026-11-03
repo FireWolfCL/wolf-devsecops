@@ -417,6 +417,7 @@ async def get_project_view(session: AsyncSession, key: str) -> dict | None:
     return {
         "key": pr.key,
         "name": pr.name,
+        "org": pr.org,
         "enabled": pr.enabled,
         "created_at": pr.created_at,
         "sources": {r.source: dict(r.settings or {}) for r in ps},

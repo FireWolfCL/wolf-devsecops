@@ -165,6 +165,9 @@ class ProjectIn(BaseModel):
 
     key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
     name: str = Field(min_length=1, max_length=200)
+    # Organización dueña: agrupa el repo en el dashboard. None = conserva la actual
+    # al editar, o el default ("Wolf") al crear. Multi-org es feature Pro.
+    org: str | None = Field(default=None, min_length=1, max_length=100)
     sources: dict[str, dict] = Field(default_factory=dict)
     enabled: bool = True
 
@@ -172,6 +175,7 @@ class ProjectIn(BaseModel):
 class ProjectOut(BaseModel):
     key: str
     name: str
+    org: str = "Wolf"
     enabled: bool
     sources: dict[str, dict]
     created_at: datetime | None = None

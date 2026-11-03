@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import edition
 from ..auth.dependencies import require_admin_action, require_role
 from ..connectors.registry import CONNECTOR_REGISTRY
 from ..core.config import SourceConfig
@@ -124,6 +125,25 @@ async def _audit(db: AsyncSession, admin: User, action: str, target_type: str,
         db, action=action, result=result, actor_user_id=admin.id, actor_username=admin.username,
         target_type=target_type, target_id=target_id, detail=detail,
     )
+
+
+async def _guard_org(db: AsyncSession, org: str | None) -> None:
+    """402 si asignar `org` INTRODUCE una organización nueva por sobre el límite de la
+    edición. Community = 1 org; re-usar una org ya existente nunca penaliza (aunque la
+    instancia venga de un downgrade con varias orgs, editar hacia una de ellas es libre)."""
+    if not org:
+        return
+    existing = await config_service.distinct_orgs(db)
+    if org in existing:
+        return
+    if not edition.org_allowed(existing, org):
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "Agrupar repos en varias organizaciones requiere la edición Pro. "
+                "La edición Community admite una sola organización."
+            ),
+        )
 
 
 # ─── Fuentes ───────────────────────────────────────────────────────────────────
@@ -279,14 +299,15 @@ async def create_project(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "key es obligatorio al crear")
     if await config_service.project_exists(db, payload.key):
         raise HTTPException(status.HTTP_409_CONFLICT, "El proyecto ya existe")
+    await _guard_org(db, payload.org)
     try:
         view = await config_service.upsert_project(
-            db, payload.key, payload.name, payload.sources, payload.enabled
+            db, payload.key, payload.name, payload.sources, payload.enabled, org=payload.org
         )
     except config_service.ConfigWriteError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     await _audit(db, admin, "config.project_updated", "project", payload.key,
-                 {"op": "create", "sources": sorted(view["sources"])})
+                 {"op": "create", "sources": sorted(view["sources"]), "org": view["org"]})
     return ProjectOut(**view)
 
 
@@ -298,14 +319,15 @@ async def update_project(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "key del cuerpo no coincide con la ruta")
     if not await config_service.project_exists(db, key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Proyecto no encontrado")
+    await _guard_org(db, payload.org)
     try:
         view = await config_service.upsert_project(
-            db, key, payload.name, payload.sources, payload.enabled
+            db, key, payload.name, payload.sources, payload.enabled, org=payload.org
         )
     except config_service.ConfigWriteError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     await _audit(db, admin, "config.project_updated", "project", key,
-                 {"op": "update", "sources": sorted(view["sources"])})
+                 {"op": "update", "sources": sorted(view["sources"]), "org": view["org"]})
     return ProjectOut(**view)
 
 

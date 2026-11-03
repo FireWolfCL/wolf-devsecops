@@ -365,6 +365,7 @@ export type ProjectSourcesConfig = Record<string, Record<string, unknown>>;
 export interface ProjectCfgOut {
   key: string;
   name: string;
+  org: string;
   enabled: boolean;
   sources: ProjectSourcesConfig;
   created_at: string | null;
@@ -373,6 +374,7 @@ export interface ProjectCfgOut {
 export interface ProjectCfgIn {
   key?: string | null; // obligatorio en POST
   name: string;
+  org?: string | null; // organización dueña; null conserva la actual / default "Wolf"
   sources: ProjectSourcesConfig;
   enabled: boolean;
 }

@@ -26,7 +26,8 @@ Estados: ✅ done · 🔄 in-progress · ⬜ pending · ⛔ blocked
 - ✅ Scheduler → snapshots en Community (alimentan campana/historial, base);
      el envío externo es lo Pro (cubierto por el gate de notificaciones)
 - ✅ IA hosted → cubierto: code-fix es Pro; el reviewer Community es local
-- ✅ Límite multi-org en Community (1 org) — enforce en import-org
+- ✅ Límite multi-org en Community (1 org) — enforce en import-org **y en el alta web**
+     (campo Organización en el formulario de repos + gate 402 al introducir org nueva)
 - ✅ Ventana de historial (30d Community / ilimitado Pro)
 
 ## Fase E2 — Features nuevas de Pro (peso 4) — 20%
