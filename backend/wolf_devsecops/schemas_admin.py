@@ -129,7 +129,7 @@ class SourceOut(BaseModel):
     token_env: str
     enabled: bool
     token_present: bool  # hay un token efectivo (de BD cifrada O del entorno), nunca el valor
-    token_source: str = "none"  # "db" (cifrado en BD) | "env" (variable) | "none"
+    token_source: str = "none"  # noqa: S105 (origen del token: "db"|"env"|"none", no un secreto)
     token_expires_at: datetime | None = None  # expiración conocida del token (no sensible)
     token_expiring_soon: bool = False  # vence en < 7 días
     updated_at: datetime | None = None

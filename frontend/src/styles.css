@@ -508,6 +508,16 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .findings-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
 .findings-table td.fix { color: var(--accent); white-space: normal; }
 .findings-table .mono { font-family: var(--mono); font-size: 12px; }
+
+/* Reporte: proporciones fijas para que "cómo arreglar" respire y los paths
+   largos ajusten (antes la tabla quedaba apretada contra el borde). El quiebre
+   agresivo se limita a ID/WHERE: SEV no se parte y queda en una línea. */
+.report-table { table-layout: fixed; }
+.report-table th:nth-child(1), .report-table td:nth-child(1) { width: 92px; }   /* SEV */
+.report-table .sev-pill { white-space: nowrap; }
+.report-table th:nth-child(2), .report-table td:nth-child(2) { width: 124px; overflow-wrap: anywhere; }  /* ID */
+.report-table th:nth-child(3), .report-table td:nth-child(3) { width: 23%; overflow-wrap: anywhere; }    /* WHERE */
+.report-table th:nth-child(4), .report-table td:nth-child(4) { width: 25%; }    /* PROBLEM */
 .sev-pill { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .3px; }
 .sev-pill.crit { background: rgba(248,113,113,.16); color: var(--danger); }
@@ -526,7 +536,7 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .report-btn { text-decoration: none; }
 .report-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
 .report-actions .spacer { flex: 1; }
-.report-doc { max-width: 920px; margin: 0 auto; background: var(--surface);
+.report-doc { max-width: 1180px; margin: 0 auto; background: var(--surface);
   border: 1px solid var(--border); border-radius: 14px; padding: 36px 40px; }
 .report-head { border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 8px; }
 .report-head h1 { margin: 0 0 6px; font-size: 24px; }
@@ -559,6 +569,26 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
   .findings-table th, .findings-table td { border-color: #ccc !important; }
   .report-section { break-inside: avoid; }
 }
+
+/* ── About / reconocimiento (admin) ──────────────────────────────────────── */
+.about { max-width: 920px; }
+.about-hero { display: flex; align-items: center; gap: 22px; padding: 22px 24px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface)); }
+.about-logo { width: 84px; height: auto; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 40%, transparent)); }
+.about-title { margin: 0; font-size: 26px; letter-spacing: .5px; }
+.about-edition { font-family: var(--mono); font-size: 12px; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 6px; padding: 2px 8px; vertical-align: middle; margin-left: 6px; }
+.about-tagline { margin: 8px 0 4px; color: var(--text); }
+.about-ver { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.about-lead { margin: 20px 0; line-height: 1.6; max-width: 70ch; }
+.about-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.about-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; background: var(--surface); }
+.about-card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.about-brand, .about-dev { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
+.about-dev { color: var(--accent); }
+.about-link { display: inline-block; margin-top: 8px; }
+.about-foot { margin-top: 24px; font-size: 12px; }
 
 /* Selector de idioma en el header */
 .lang-switcher { background: var(--surface); color: var(--text); border: 1px solid var(--border);

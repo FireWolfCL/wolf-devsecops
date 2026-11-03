@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -20,7 +21,9 @@ from wolf_devsecops.services import update_service as us
 from wolf_devsecops.services import user_service
 from wolf_devsecops.settings import get_settings
 
-HEAD = "0003_posture_snapshots"
+# Última migración de alembic (actualizar al agregar una nueva revisión).
+HEAD = "0006_source_token_cipher"
+_MIGRATION_COUNT = 6  # nº total de revisiones (pendientes en una BD virgen)
 
 
 def _bearer(user):
@@ -90,7 +93,10 @@ async def test_degradation_no_repo_and_status_still_works(env):
     assert b["server"]["update_available"] is None  # nunca "al día" sin poder leer
     assert b["server"]["current_version"] == __version__
     assert b["update_command"] == get_settings().update_command and b["environment"] == "development"
-    assert "token" not in r.text.lower()
+    # Guard anti-fuga de credenciales: se excluye el bloque `migrations`, cuyos slugs
+    # (p. ej. "0006_source_token_cipher") contienen "token" de forma legítima.
+    non_migration = json.dumps({k: v for k, v in b.items() if k != "migrations"}).lower()
+    assert "token" not in non_migration
 
 
 @pytest.mark.parametrize("mode,reason", [("net", "network_error"), (404, "http_404"),
@@ -187,7 +193,7 @@ async def test_migration_status_pending_then_apply_on_fresh_db(env, tmp_path):
     s.database_url = f"sqlite+aiosqlite:///{tmp_path}/fresh.db"  # BD virgen
     await db_engine.dispose_engine()
     assert await us.migration_status() == {
-        "current": None, "head": HEAD, "pending": 3, "up_to_date": False}
+        "current": None, "head": HEAD, "pending": _MIGRATION_COUNT, "up_to_date": False}
     out = await us.apply_migrations(environment="development", confirm_backup=False)
     assert out == {"current": HEAD, "head": HEAD, "pending": 0, "up_to_date": True}
     # production CON confirmación pasa el gate

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
 import { RequireAuth, RequireRole } from "./auth/guards";
+import { About } from "./pages/About";
 import { AdminLayout } from "./components/AdminLayout";
 import { Layout } from "./components/Layout";
 import { Herramientas } from "./pages/Herramientas";
@@ -95,6 +96,7 @@ export function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="ai" element={<AIConfig />} />
           <Route path="updates" element={<UpdateCenter />} />
+          <Route path="about" element={<About />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

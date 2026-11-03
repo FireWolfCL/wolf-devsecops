@@ -29,7 +29,7 @@ _API_VERSION = "2022-11-28"
 # Cabecera que GitHub devuelve para tokens que expiran (fine-grained PAT, o classic con
 # expiración). Formato típico: "2026-12-31 23:59:59 UTC". Los classic sin expiración no
 # la mandan. Capturarla deja que el panel avise antes de que el token venza (item 5/6).
-_TOKEN_EXPIRY_HEADER = "github-authentication-token-expiration"
+_TOKEN_EXPIRY_HEADER = "github-authentication-token-expiration"  # noqa: S105 (nombre de cabecera, no un secreto)
 
 _FAILURE = {"failure", "timed_out", "startup_failure", "cancelled", "action_required"}
 _RUNNING = {"in_progress", "queued", "requested", "waiting", "pending"}
