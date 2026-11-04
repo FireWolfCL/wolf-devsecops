@@ -338,6 +338,19 @@ export interface SourceTokenStatus {
   token_expiring_soon: boolean;
 }
 
+/** GET/PUT/DELETE /settings/license (E4): estado de la licencia efectiva + origen.
+ *  NUNCA incluye el token (es un JWS verificable, no un secreto, pero no se expone). */
+export interface LicenseStatus {
+  present: boolean;
+  valid: boolean;
+  source: "db" | "env" | "none"; // de dónde sale el token efectivo
+  edition?: string;
+  customer?: string | null;
+  expires_at?: string | null;
+  days_left?: number | null;
+  error?: string | null; // invalid_signature | expired | wrong_product
+}
+
 /** GET /settings/available-sources: catálogo (configurada o no). */
 export interface AvailableSource {
   name: string;

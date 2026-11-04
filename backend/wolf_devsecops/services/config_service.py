@@ -78,10 +78,16 @@ def invalidate_config() -> None:
 
 
 async def refresh_config() -> AppConfig:
-    """Reconstruye el AppConfig desde la BD y lo cachea."""
+    """Reconstruye el AppConfig desde la BD y lo cachea.
+
+    De paso resuelve la licencia (E4): fija `settings.license` con el token de BD si
+    existe, o con el baseline del entorno si no. Así el arranque y cada refresh dejan
+    `settings.license` con la precedencia BD>env, sin tocar `licensing/` ni `edition.py`.
+    """
     global _cached
     async with get_sessionmaker()() as session:
         _cached = await assemble_app_config(session)
+        await resolve_license_into_settings(session)
     return _cached
 
 
@@ -197,6 +203,104 @@ async def _set_system_flag(session: AsyncSession, key: str, value: object) -> No
     else:
         row.value = {"v": value}
     await session.commit()
+
+
+# ═══ Licencia firmada por la web (E4) — precedencia BD > env ═════════════════════
+# La licencia es un JWS firmado por la WLA (ES256) y se verifica con la pública
+# EMBEBIDA (licensing/wolf-devsecops-license.pub). NO es un secreto (a diferencia de
+# los tokens de fuente / bind password, que van cifrados con Fernet): se guarda en
+# TEXTO PLANO en `system_config` bajo la clave "license_token".
+#
+# Precedencia: si hay token en BD, MANDA sobre WOLF_LICENSE del entorno. Para no
+# tocar `licensing/__init__.py` ni `edition.py`, aquí solo cambiamos el ORIGEN del
+# token: se FIJA `settings.license` con el de BD (o con el baseline del entorno si no
+# hay en BD). Todo lo demás (`current_edition`, `licensing.status/effective_edition/
+# load`) sigue leyendo `settings.license` sin cambios.
+_LICENSE_KEY = "license_token"
+
+# WOLF_LICENSE que vino del ENTORNO, capturado ANTES de que la BD lo pise. Es el
+# fallback al que se REVIERTE `settings.license` cuando se borra el token de BD. Se
+# captura una sola vez (la primera resolución, en el arranque, cuando `settings.license`
+# aún es el valor del entorno). `reset_license_baseline()` lo olvida (tests/reconfig).
+_env_license: str | None = None
+
+
+def reset_license_baseline() -> None:
+    """Olvida el baseline de WOLF_LICENSE capturado. Solo para tests o una recarga
+    total de settings: fuerza a recapturar el entorno en la próxima resolución."""
+    global _env_license
+    _env_license = None
+
+
+def _capture_env_license(settings) -> str:
+    """Captura (una vez) el WOLF_LICENSE del entorno como baseline de fallback."""
+    global _env_license
+    if _env_license is None:
+        _env_license = getattr(settings, "license", "") or ""
+    return _env_license
+
+
+async def get_license_token(session: AsyncSession) -> str | None:
+    """Token de licencia guardado en BD (`system_config`), o None si no hay."""
+    row = await session.get(SystemConfigRow, _LICENSE_KEY)
+    if row is None:
+        return None
+    token = (row.value or {}).get("v")
+    return str(token) if token else None
+
+
+async def resolve_license_into_settings(
+    session: AsyncSession, settings=None
+) -> str | None:
+    """Fija `settings.license` según la precedencia BD>env y devuelve el ORIGEN efectivo
+    ("db" | "env" | None). Captura el baseline del entorno la primera vez (antes de
+    pisarlo). No invalida la caché de AppConfig: la licencia no forma parte del
+    AppConfig (fuentes/proyectos/IA); solo afecta a `settings.license`, que
+    `edition`/`licensing` leen en vivo."""
+    settings = settings or get_settings()
+    env_baseline = _capture_env_license(settings)
+    db_token = await get_license_token(session)
+    if db_token:
+        settings.license = db_token
+        return "db"
+    settings.license = env_baseline
+    return "env" if env_baseline else None
+
+
+async def set_license_token(
+    session: AsyncSession, token: str, *, updated_by: str | None = None
+) -> str:
+    """Guarda el token de licencia en BD (texto plano: es un JWS verificable, no un
+    secreto) y re-resuelve `settings.license` para que la BD mande de inmediato, sin
+    reiniciar. La VALIDACIÓN de firma/producto la hace el endpoint ANTES de llamar aquí.
+    `updated_by` se acepta por simetría con los demás writes (no se persiste: el QUIÉN
+    va al audit trail del router)."""
+    tok = (token or "").strip()
+    if not tok:
+        raise ConfigWriteError("El token de licencia no puede estar vacío.")
+    row = await session.get(SystemConfigRow, _LICENSE_KEY)
+    if row is None:
+        session.add(SystemConfigRow(key=_LICENSE_KEY, value={"v": tok}))
+    else:
+        row.value = {"v": tok}
+    await session.commit()
+    await resolve_license_into_settings(session)  # BD manda: settings.license = tok
+    return tok
+
+
+async def clear_license_token(
+    session: AsyncSession, *, updated_by: str | None = None
+) -> bool:
+    """Borra el token de licencia de BD y revierte `settings.license` al baseline del
+    entorno. Devuelve True si había algo que borrar. Idempotente: sin fila igual
+    re-resuelve (por si `settings.license` quedó con un valor de BD obsoleto)."""
+    row = await session.get(SystemConfigRow, _LICENSE_KEY)
+    had = row is not None
+    if row is not None:
+        await session.delete(row)
+        await session.commit()
+    await resolve_license_into_settings(session)  # revierte a env baseline
+    return had
 
 
 # ═══ ESCRITURA (A4, ADR-015) ═══════════════════════════════════════════════════

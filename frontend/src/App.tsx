@@ -9,6 +9,7 @@ import { Layout } from "./components/Layout";
 import { Herramientas } from "./pages/Herramientas";
 import { AIConfig } from "./pages/AIConfig";
 import { Integraciones } from "./pages/Integraciones";
+import { License } from "./pages/License";
 import { Login } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
@@ -97,6 +98,7 @@ export function App() {
           <Route path="users" element={<Users />} />
           <Route path="integraciones" element={<Integraciones />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="license" element={<License />} />
           <Route path="ai" element={<AIConfig />} />
           <Route path="updates" element={<UpdateCenter />} />
           <Route path="audit" element={<Audit />} />

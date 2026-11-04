@@ -248,6 +248,32 @@ class LDAPBindPasswordIn(BaseModel):
     password: str = Field(min_length=1, max_length=400)
 
 
+# ─── Licencia firmada por la web (E4) ─────────────────────────────────────────
+class LicenseIn(BaseModel):
+    """PUT /settings/license — el token JWS firmado por la WLA, pegado tal cual (o el
+    contenido de un archivo .lic). NO es un secreto (se verifica con la pública
+    embebida), pero el endpoint lo valida (firma + producto) antes de guardarlo.
+    `extra="forbid"`: cualquier campo extra inesperado → 422."""
+
+    model_config = _STRICT
+
+    token: str = Field(min_length=1, max_length=4000)
+
+
+class LicenseOut(BaseModel):
+    """Estado de la licencia efectiva (mismo shape que `licensing.status`), más el
+    ORIGEN del token. NUNCA incluye el token en sí (ni un prefijo)."""
+
+    present: bool
+    valid: bool
+    source: str = "none"  # "db" | "env" | "none" — de dónde sale el token efectivo
+    edition: str | None = None
+    customer: str | None = None
+    expires_at: str | None = None
+    days_left: int | None = None
+    error: str | None = None  # invalid_signature | expired | wrong_product
+
+
 class UserCreate(BaseModel):
     model_config = _STRICT
 

@@ -9,6 +9,7 @@ const ADMIN_TABS = [
   { to: "/admin/users", label: "admin.tab.users" },
   { to: "/admin/integraciones", label: "admin.tab.integrations" },
   { to: "/admin/settings", label: "admin.tab.settings" },
+  { to: "/admin/license", label: "admin.tab.license" },
   { to: "/admin/ai", label: "admin.tab.ai" },
   { to: "/admin/updates", label: "admin.tab.updates" },
   { to: "/admin/audit", label: "admin.tab.audit" },

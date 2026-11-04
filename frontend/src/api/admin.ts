@@ -7,6 +7,7 @@ import type {
   AvailableSource,
   ApplyMigrationsOut,
   CurrentVersionOut,
+  LicenseStatus,
   LoginResponse,
   MFAEnableResponse,
   MFASetupResponse,
@@ -100,6 +101,12 @@ export const settingsApi = {
   getAI: () => request<AISettingsOut>("/api/v1/settings/ai"),
   putAI: (body: AISettingsIn) =>
     request<AISettingsOut>("/api/v1/settings/ai", { method: "PUT", json: body }),
+  // Licencia (E4): la licencia NO es un secreto (JWS verificable), pero la respuesta
+  // nunca trae el token, solo el estado + origen. PUT valida firma/producto (422).
+  getLicense: () => request<LicenseStatus>("/api/v1/settings/license"),
+  putLicense: (token: string) =>
+    request<LicenseStatus>("/api/v1/settings/license", { method: "PUT", json: { token } }),
+  clearLicense: () => request<LicenseStatus>("/api/v1/settings/license", { method: "DELETE" }),
 };
 
 export const updatesApi = {

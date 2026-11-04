@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import edition
+from .. import edition, licensing
 from ..auth.dependencies import require_admin_action, require_role
 from ..connectors.registry import CONNECTOR_REGISTRY
 from ..core.config import SourceConfig
@@ -34,6 +34,8 @@ from ..schemas_admin import (
     LDAPBindPasswordIn,
     LDAPConfigIn,
     LDAPConfigOut,
+    LicenseIn,
+    LicenseOut,
     ProjectIn,
     ProjectOut,
     SourceIn,
@@ -42,6 +44,7 @@ from ..schemas_admin import (
     SourceTokenStatusOut,
 )
 from ..services import audit_service, config_service
+from ..settings import get_settings
 
 # Umbral del aviso "vence pronto" (item 6). El envío de la notificación es del scheduler.
 _EXPIRING_SOON = timedelta(days=7)
@@ -370,6 +373,65 @@ async def put_ai(
         {"enabled": row.enabled, "provider": row.provider, "model": row.model},
     )
     return _ai_out(row)
+
+
+# ─── Licencia firmada por la web (E4) ──────────────────────────────────────────
+# El router ya exige admin + MFA. La licencia NO es un secreto (JWS verificable con la
+# pública embebida): se guarda en texto plano en BD y MANDA sobre WOLF_LICENSE del
+# entorno (precedencia BD>env resuelta en config_service). Nunca se devuelve el token.
+def _license_out(status_dict: dict, source: str | None) -> LicenseOut:
+    return LicenseOut(source=source or "none", **status_dict)
+
+
+@router.get("/license", response_model=LicenseOut)
+async def get_license(db: AsyncSession = Depends(get_db)) -> LicenseOut:
+    """Estado de la licencia efectiva + su origen (db|env|none). Re-resuelve para que
+    el estado mostrado coincida siempre con la fuente de verdad (BD>env). Sin token."""
+    source = await config_service.resolve_license_into_settings(db)
+    return _license_out(licensing.status(get_settings()), source)
+
+
+@router.put("/license", response_model=LicenseOut)
+async def put_license(
+    payload: LicenseIn, admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> LicenseOut:
+    """Valida ANTES de guardar: verifica la firma (WLA) y que el producto sea el nuestro.
+    Firma inválida o producto equivocado → 422 con mensaje claro (distingue ambos casos).
+    Una licencia firmada y de nuestro producto PERO vencida se acepta (el estado la
+    muestra como vencida; la edición degrada). El token nunca se audita: solo el hecho y
+    los datos derivados (edición/cliente/expiración)."""
+    claims = licensing.parse(payload.token)
+    if claims is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Firma de licencia inválida: no está firmada por la Wolf License Authority.",
+        )
+    if claims.product != licensing.PRODUCT:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La licencia es de otro producto ('{claims.product}'): se esperaba "
+            f"'{licensing.PRODUCT}'.",
+        )
+    await config_service.set_license_token(db, payload.token, updated_by=admin.username)
+    # Auditoría SIN el token: solo el hecho y los datos derivados de las claims.
+    await _audit(db, admin, "license.set", "license", "license", {
+        "edition": claims.edition, "customer": claims.customer,
+        "expires_at": claims.expires_at.isoformat() if claims.expires_at else None,
+    })
+    return _license_out(licensing.status(get_settings()), "db")
+
+
+@router.delete("/license", response_model=LicenseOut)
+async def delete_license(
+    admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> LicenseOut:
+    """Limpia la licencia de BD y revierte a WOLF_LICENSE del entorno (o a ninguna).
+    Nunca falla si no había licencia (idempotente). Audita el hecho."""
+    await config_service.clear_license_token(db, updated_by=admin.username)
+    await _audit(db, admin, "license.cleared", "license", "license", None)
+    status_dict = licensing.status(get_settings())
+    source = "env" if status_dict.get("present") else "none"
+    return _license_out(status_dict, source)
 
 
 # ─── LDAP / SSO (feature Pro) ──────────────────────────────────────────────────
