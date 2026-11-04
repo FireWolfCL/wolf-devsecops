@@ -92,6 +92,8 @@ function text(ev: EventItem, lang: Lang): string {
     case "worsened": return es ? `Empeoró: ${ev.band_from} → ${ev.band_to}` : `Worsened: ${ev.band_from} → ${ev.band_to}`;
     case "ci_failed": return es ? "CI en rojo" : "CI is failing";
     case "gate_error": return es ? "Quality gate en ERROR" : "Quality gate is ERROR";
+    case "exception_expired": return es ? "Venció una aceptación de riesgo" : "A risk acceptance expired";
+    case "exception_expire_failed": return es ? "Venció un riesgo y no se pudo revertir" : "A risk expired but revert failed";
     default: return ev.kind;
   }
 }

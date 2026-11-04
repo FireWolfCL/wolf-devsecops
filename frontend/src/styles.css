@@ -777,6 +777,16 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .modal-picks { margin: 6px 0 0; padding-left: 18px; max-height: 180px; overflow-y: auto; font-size: 13px; overflow-wrap: anywhere; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
+/* 6.3.b/6.3.d — modal de excepción + vista de riesgos aceptados. */
+.alert.sm { font-size: 12.5px; padding: 6px 10px; margin: 8px 0 0; }
+.exc-target { font-size: 13px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.risks-view { padding: 4px 0; }
+.risks-table td { vertical-align: top; }
+.risks-just { max-width: 340px; white-space: normal; overflow-wrap: anywhere; font-size: 12.5px; }
+.risks-actions { white-space: nowrap; }
+.risks-table .exp-soon { color: var(--warn); font-weight: 600; }
+.risks-table .exp-over { color: var(--danger); font-weight: 600; }
+
 /* Filtro por tipo de escaneo en Hallazgos (6.2) */
 .cat-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
 .cat-filter .chip.on { background: var(--accent); color: #062018; border-color: var(--accent); font-weight: 600; }

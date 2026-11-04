@@ -210,6 +210,7 @@ class DefectDojoConnector(Connector):
                 "kind": "vuln",
                 "category": _category(f),  # secrets|sast|sca|container|iac|dast|other (6.2)
                 "status": _finding_status(f),  # gestión en DefectDojo → 'en triage' (2.3)
+                "ref": str(f["id"]) if f.get("id") is not None else None,  # id DB para escritura (ADR-021)
                 "id": f.get("cve") or f.get("vuln_id_from_tool") or None,
                 "pkg": pkg,
                 "installed": ver,
@@ -240,3 +241,41 @@ class DefectDojoConnector(Connector):
                 "findings": findings,  # QUÉ está afectado + cómo mejorarlo
             },
         )
+
+    # ─── ESCRITURA acotada (ADR-021): fija el estado nativo de un finding ───────
+    # Única escritura de este conector. Usa el token de lectura (ADR-002/020); si no
+    # tiene permiso, 403 saneado. Para suprimir: active=False + el flag; revocar:
+    # active=True + flags en False.
+    async def set_finding_state(
+        self,
+        finding_id: str,
+        *,
+        active: bool,
+        false_p: bool = False,
+        risk_accepted: bool = False,
+        out_of_scope: bool = False,
+        is_mitigated: bool = False,
+    ) -> None:
+        # finding_id es dato del usuario y va en el PATH: exigir id numérico de
+        # DefectDojo evita cualquier traversal/inyección en la URL.
+        if not str(finding_id).isdigit():
+            raise ConnectorUnavailable("Id de finding inválido para DefectDojo (debe ser numérico).")
+        url = f"{self._base}/api/v2/findings/{finding_id}/"
+        payload = {
+            "active": active,
+            "false_p": false_p,
+            "risk_accepted": risk_accepted,
+            "out_of_scope": out_of_scope,
+            "is_mitigated": is_mitigated,
+        }
+        try:
+            async with self._client() as client:
+                resp = await client.patch(url, headers=self._headers(), json=payload)
+        except httpx.HTTPError as exc:
+            raise ConnectorUnavailable("No se pudo contactar DefectDojo.") from exc
+        if resp.status_code == 403:
+            raise ConnectorUnavailable("El token de DefectDojo no tiene permiso de escritura.")
+        if resp.status_code == 404:
+            raise ConnectorUnavailable("El finding no existe en DefectDojo.")
+        if resp.status_code not in (200, 202):
+            raise ConnectorUnavailable(f"DefectDojo respondió HTTP {resp.status_code} al escribir el estado.")

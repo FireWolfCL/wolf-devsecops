@@ -13,6 +13,7 @@ import type { RemediationPick, TrivyFinding } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { useAsync, useMeta } from "../hooks";
 import { useT, type TFn } from "../i18n";
+import { ExceptionModal } from "./ExceptionModal";
 import { MAX_PICKS, RemediationBranchModal } from "./RemediationBranchModal";
 
 const SEV_CLASS: Record<string, string> = {
@@ -150,6 +151,13 @@ export function FindingsDetail({
   const isProPR = meta?.features?.includes("remediation.pr") ?? false;
   const [showBranch, setShowBranch] = useState(false);
   const [writeDisabled, setWriteDisabled] = useState(false);
+  // 6.3.b — excepciones: escribir estado a la fuente. Solo DefectDojo/Sonar, operator+,
+  // feature Pro. El finding necesita un `ref` de escritura (id DefectDojo / key Sonar).
+  const excSource = source === "defectdojo" || source === "sonarqube" ? source : null;
+  const excFeature = meta?.features?.includes("exceptions.writeback") ?? false;
+  const showExc = Boolean(excSource) && excFeature && canWrite;
+  const [excFor, setExcFor] = useState<{ ref: string; title?: string | null; category?: string | null } | null>(null);
+  const [excMsg, setExcMsg] = useState<string | null>(null);
 
   if (loading) return <p className="muted findings-loading">{t("common.loading")}</p>;
   if (error) return <p className="muted">{error}</p>;
@@ -202,6 +210,17 @@ export function FindingsDetail({
       <div className="findings-head muted">
         {shown} / {total} — {t("report.howFix")}
       </div>
+
+      {excMsg && <div className="alert ok sm" role="status">{excMsg}</div>}
+      {excFor && excSource && (
+        <ExceptionModal
+          projectKey={projectKey}
+          source={excSource}
+          finding={excFor}
+          onClose={() => setExcFor(null)}
+          onDone={(m) => setExcMsg(m)}
+        />
+      )}
 
       {showCatFilter && (
         <div className="cat-filter" role="group" aria-label={t("findings.cat.filter")}>
@@ -265,6 +284,7 @@ export function FindingsDetail({
             <th>{t("findings.where")}</th>
             <th>{t("findings.problem")}</th>
             <th>{t("findings.howto")}</th>
+            {showExc && <th>{t("exc.col")}</th>}
           </tr>
         </thead>
         <tbody>
@@ -304,6 +324,16 @@ export function FindingsDetail({
               </td>
               <td>{f.title || "—"}</td>
               <td className="fix">{fixHint(f, t)}</td>
+              {showExc && (
+                <td>
+                  {f.ref ? (
+                    <button type="button" className="btn sm"
+                            onClick={() => { setExcMsg(null); setExcFor({ ref: f.ref as string, title: f.title, category: f.category }); }}>
+                      {t("exc.col")}
+                    </button>
+                  ) : null}
+                </td>
+              )}
             </tr>
             )
           ))}

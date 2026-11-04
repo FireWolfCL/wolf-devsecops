@@ -86,6 +86,31 @@ class SonarQubeConnector(Connector):
                 detail="No se pudo contactar SonarQube.",
             )
 
+    # ─── ESCRITURA acotada (ADR-021): transición de estado de un issue ──────────
+    # Única escritura de este conector. Usa el token de lectura (ADR-002/020); si no
+    # tiene permiso, 403 saneado. transition: falsepositive | accept | wontfix | reopen.
+    async def transition_issue(self, issue_key: str, transition: str) -> None:
+        # issue_key es dato del usuario: aunque va como form field (no en el path),
+        # se restringe al alfabeto real de claves de Sonar por defensa en profundidad.
+        if not re.fullmatch(r"[A-Za-z0-9:_.\-]{1,200}", issue_key or ""):
+            raise ConnectorUnavailable("Clave de issue inválida para SonarQube.")
+        url = f"{self._base}/api/issues/do_transition"
+        try:
+            async with self._client() as client:
+                resp = await client.post(
+                    url, headers=self._headers(), data={"issue": issue_key, "transition": transition}
+                )
+        except httpx.HTTPError as exc:
+            raise ConnectorUnavailable("No se pudo contactar SonarQube.") from exc
+        if resp.status_code == 400 and transition == "accept":
+            # Sonar < 10.4 no tiene la transición 'accept'; cae a 'wontfix'.
+            await self.transition_issue(issue_key, "wontfix")
+            return
+        if resp.status_code == 403:
+            raise ConnectorUnavailable("El token de SonarQube no tiene permiso para transicionar issues.")
+        if resp.status_code != 200:
+            raise ConnectorUnavailable(f"SonarQube respondió HTTP {resp.status_code} al transicionar el issue.")
+
     async def _get(self, client: httpx.AsyncClient, path: str, params: dict) -> dict:
         resp = await client.get(f"{self._base}{path}", headers=self._headers(), params=params)
         if resp.status_code != 200:
@@ -232,6 +257,7 @@ class SonarQubeConnector(Connector):
                     target = f"{path}:{line}" if line else path
                     findings.append({
                         "kind": "sonar",
+                        "ref": i.get("key"),  # issue key para transicionar (ADR-021)
                         "id": i.get("rule"),
                         "pkg": None,
                         "installed": None,

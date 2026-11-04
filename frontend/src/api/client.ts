@@ -10,6 +10,9 @@ import type {
   EventList,
   EventReport,
   UnreadCount,
+  ExceptionIn,
+  ExceptionItem,
+  ExceptionList,
   ModuleTree,
   PostureHistory,
   PostureSparklines,
@@ -72,6 +75,30 @@ export function fetchHistory(key: string, days?: number): Promise<PostureHistory
 export function fetchSpark(days?: number): Promise<PostureSparklines> {
   const qs = days != null ? `?days=${encodeURIComponent(String(days))}` : "";
   return request<PostureSparklines>(`/api/v1/projects/history/spark${qs}`);
+}
+
+// ─── Excepciones de hallazgos (ADR-021, 6.3.b/6.3.d) ────────────────────────
+export function createException(key: string, body: ExceptionIn): Promise<ExceptionItem> {
+  return request<ExceptionItem>(`/api/v1/projects/${encodeURIComponent(key)}/exceptions`, {
+    method: "POST", json: body,
+  });
+}
+
+export function approveException(id: string): Promise<ExceptionItem> {
+  return request<ExceptionItem>(`/api/v1/exceptions/${encodeURIComponent(id)}/approve`, { method: "POST" });
+}
+
+export function revokeException(id: string): Promise<ExceptionItem> {
+  return request<ExceptionItem>(`/api/v1/exceptions/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+}
+
+export function fetchExceptions(params: { project?: string; category?: string; status?: string } = {}): Promise<ExceptionList> {
+  const qs = new URLSearchParams();
+  if (params.project) qs.set("project", params.project);
+  if (params.category) qs.set("category", params.category);
+  if (params.status) qs.set("status", params.status);
+  const q = qs.toString();
+  return request<ExceptionList>(`/api/v1/exceptions${q ? `?${q}` : ""}`);
 }
 
 // Descarga del PDF de cumplimiento (2.4, Pro). No pasa por request() porque la

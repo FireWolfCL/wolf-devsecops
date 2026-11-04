@@ -31,7 +31,8 @@ _COMPLIANCE_DELTA = 5.0  # pp mínimos para un evento de % (sin cambio de banda)
 
 # Taxonomía de kinds para el reporte.
 GOOD_KINDS = {"improved", "resolved_critical", "resolved_high"}
-BAD_KINDS = {"worsened", "new_critical", "new_high", "ci_failed", "gate_error"}
+BAD_KINDS = {"worsened", "new_critical", "new_high", "ci_failed", "gate_error",
+             "exception_expired", "exception_expire_failed"}
 
 
 def _ev(

@@ -410,6 +410,39 @@ class PostureHistory(BaseModel):
     snapshots: list[PostureSnapshot] = []  # orden ascendente por captured_at
 
 
+class ExceptionIn(BaseModel):
+    """Alta de una excepción de hallazgo (ADR-021). El motivo es obligatorio."""
+    model_config = {"extra": "forbid"}
+    source: Literal["defectdojo", "sonarqube"]
+    finding_ref: str = Field(min_length=1, max_length=200)
+    kind: Literal["false_positive", "risk_accepted", "out_of_scope", "mitigated"]
+    justification: str = Field(min_length=3, max_length=2000)
+    finding_title: str | None = Field(default=None, max_length=300)
+    category: str | None = Field(default=None, max_length=20)
+    expires_days: int | None = Field(default=None, ge=1, le=365)  # solo risk_accepted
+
+
+class ExceptionOut(BaseModel):
+    id: str
+    project_key: str
+    source: str
+    finding_ref: str
+    finding_title: str | None = None
+    category: str | None = None
+    kind: str
+    justification: str
+    status: str  # proposed | applied | revoked | expired
+    created_by: str | None = None
+    created_at: datetime
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class ExceptionList(BaseModel):
+    items: list[ExceptionOut] = []
+
+
 class PostureSparklines(BaseModel):
     """Series compactas de % de cumplimiento por proyecto para los sparklines del
     dashboard. Una sola consulta a BD (ADR-012: nunca golpea las fuentes)."""

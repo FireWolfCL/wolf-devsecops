@@ -74,6 +74,11 @@ class Aggregator:
         token = resolve_token(source.token_env, source.token_cipher)  # BD cifrada > env
         return cls(source, token)
 
+    def connector_for(self, source_name: str) -> Connector | None:
+        """Conector con token resuelto para una fuente (lo usa la escritura acotada
+        ADR-021). None si la fuente no está configurada."""
+        return self._build_connector(source_name)
+
     def _project_uses(self, project: ProjectConfig, source_name: str) -> bool:
         return getattr(project, source_name, None) is not None
 

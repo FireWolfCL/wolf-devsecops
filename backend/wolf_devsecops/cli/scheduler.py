@@ -22,6 +22,7 @@ from ..db.engine import dispose_engine, get_sessionmaker
 from ..services import (
     audit_service,
     config_service,
+    exceptions_service,
     notification_service,
     posture_history_service,
 )
@@ -39,8 +40,11 @@ async def _cycle() -> tuple[int, dict]:
         written, _skipped = await posture_history_service.capture_snapshots(
             session, aggregator, config
         )
+        # Vence las aceptaciones de riesgo (ADR-021): revierte en la fuente + alerta.
+        expired = await exceptions_service.expire_due(session, aggregator)
     async with sm() as session:
         disp = await notification_service.dispatch_pending(session, settings)
+    disp["exceptions_expired"] = expired
     async with sm() as session:
         rem = await notification_service.check_token_expiry(session, settings)
     disp["token_reminders"] = rem.get("reminded", 0)

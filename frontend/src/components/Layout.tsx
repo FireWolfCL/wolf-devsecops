@@ -62,6 +62,7 @@ export function Layout() {
           <NavLink to="/" end>{t("nav.projects")}</NavLink>
           <NavLink to="/tools">{t("nav.tools")}</NavLink>
           <NavLink to="/activity">{lang === "en" ? "What's new" : "Novedades"}</NavLink>
+          <NavLink to="/risks">{t("nav.risks")}</NavLink>
           {isAdmin && <NavLink to="/admin">{t("nav.admin")}</NavLink>}
         </nav>
         {user && (

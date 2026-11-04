@@ -36,6 +36,7 @@ FEATURE_REMEDIATION_PR = "remediation.pr"       # branch + PR-draft (Feature D)
 FEATURE_HISTORY_UNLIMITED = "history.unlimited"  # tendencia más allá de la ventana base
 FEATURE_REPORTS_SCHEDULED = "reports.scheduled"  # reportes programados (roadmap)
 FEATURE_REPORTS_COMPLIANCE = "reports.compliance"  # reporte de cumplimiento (roadmap)
+FEATURE_EXCEPTIONS_WRITEBACK = "exceptions.writeback"  # escribir estado de hallazgos a la fuente (ADR-021)
 FEATURE_SSO = "sso"                             # SSO / LDAP / AD (roadmap)
 FEATURE_AUDIT_EXPORT = "audit.export"           # export/retención de auditoría (roadmap)
 FEATURE_UPDATES_CHANNEL = "updates.channel"     # canal de updates firmado (roadmap)
@@ -49,7 +50,7 @@ _PRO_FEATURES = frozenset({
     FEATURE_MULTI_ORG, FEATURE_NOTIFICATIONS, FEATURE_SCHEDULER, FEATURE_AI_HOSTED,
     FEATURE_AI_CODEFIX, FEATURE_REMEDIATION_PR, FEATURE_HISTORY_UNLIMITED,
     FEATURE_REPORTS_SCHEDULED, FEATURE_REPORTS_COMPLIANCE, FEATURE_SSO,
-    FEATURE_AUDIT_EXPORT, FEATURE_UPDATES_CHANNEL,
+    FEATURE_AUDIT_EXPORT, FEATURE_UPDATES_CHANNEL, FEATURE_EXCEPTIONS_WRITEBACK,
 })
 _ENTERPRISE_EXTRA = frozenset({FEATURE_WHITELABEL, FEATURE_MULTI_TENANT})
 

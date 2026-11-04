@@ -194,6 +194,8 @@ export interface TrivyFinding {
   category?: string;
   /** Estado de gestión en DefectDojo (2.3): active|verified|mitigated|under_review|risk_accepted. */
   status?: string | null;
+  /** Ref de escritura en la fuente (ADR-021): id numérico DefectDojo / key de issue Sonar. */
+  ref?: string | null;
   id: string | null; // CVE / regla
   pkg: string | null;
   installed: string | null;
@@ -513,6 +515,40 @@ export interface PostureHistory {
   window_days?: number | null;
   /** Orden ascendente por captured_at; puede venir vacío. */
   snapshots: PostureSnapshot[];
+}
+
+// ─── Excepciones de hallazgos (ADR-021, 6.3.b/6.3.d) ────────────────────────
+export type ExceptionKind = "false_positive" | "risk_accepted" | "out_of_scope" | "mitigated";
+
+export interface ExceptionIn {
+  source: "defectdojo" | "sonarqube";
+  finding_ref: string;
+  kind: ExceptionKind;
+  justification: string;
+  finding_title?: string | null;
+  category?: string | null;
+  expires_days?: number | null;
+}
+
+export interface ExceptionItem {
+  id: string;
+  project_key: string;
+  source: string;
+  finding_ref: string;
+  finding_title: string | null;
+  category: string | null;
+  kind: ExceptionKind;
+  justification: string;
+  status: "proposed" | "applied" | "revoked" | "expired" | "expire_failed" | "write_failed";
+  created_by: string | null;
+  created_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  expires_at: string | null;
+}
+
+export interface ExceptionList {
+  items: ExceptionItem[];
 }
 
 // ─── Sparklines del dashboard (GET /api/v1/projects/history/spark?days=N) ────

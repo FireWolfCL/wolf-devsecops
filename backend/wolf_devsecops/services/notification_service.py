@@ -51,7 +51,7 @@ async def send_email(settings: Settings, subject: str, body_html: str) -> bool:
 _ICON = {
     "new_critical": "🔴", "resolved_critical": "✅", "new_high": "🟠",
     "resolved_high": "✅", "improved": "📈", "worsened": "📉",
-    "ci_failed": "🚧", "gate_error": "🛑",
+    "ci_failed": "🚧", "gate_error": "🛑", "exception_expired": "⏰", "exception_expire_failed": "⛔",
 }
 
 
@@ -78,6 +78,12 @@ def _line(ev: ProjectEvent, lang: str) -> str:
             body = "CI en rojo" if es else "CI is failing"
         case "gate_error":
             body = "quality gate en ERROR" if es else "quality gate is ERROR"
+        case "exception_expired":
+            body = ("venció una aceptación de riesgo: vuelve a contar" if es
+                    else "a risk acceptance expired: it counts again")
+        case "exception_expire_failed":
+            body = ("venció una aceptación de riesgo pero NO se pudo revertir en la fuente: sigue oculta"
+                    if es else "a risk acceptance expired but could NOT be reverted at the source: still hidden")
         case _:
             body = ev.kind
     return f"{icon} <b>{ev.project_key}</b> — {body}"

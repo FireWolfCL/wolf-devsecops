@@ -15,6 +15,7 @@ from .config import (
     SystemConfigRow,
 )
 from .events import EventRead, ProjectEvent
+from .exceptions import SourceException
 from .posture import PostureSnapshot
 from .user import User
 
@@ -23,6 +24,7 @@ __all__ = [
     "AISettingsRow",
     "EventRead",
     "PostureSnapshot",
+    "SourceException",
     "ProjectEvent",
     "ProjectRow",
     "ProjectSourceRow",

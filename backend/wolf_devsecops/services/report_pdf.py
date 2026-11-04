@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 from datetime import UTC, datetime
+from xml.sax.saxutils import escape
 
 from reportlab.graphics.shapes import Drawing, Line, PolyLine
 from reportlab.lib import colors
@@ -230,7 +231,8 @@ def build_pdf(
     else:
         arows = [[t["ac_id"], t["ac_reason"], t["ac_by"], t["ac_exp"]]]
         for e in accepted:
-            arows.append([e.match, Paragraph(e.reason or "—", small), e.approved_by or "—", e.expires or "—"])
+            # reason es dato del usuario → escapar antes de Paragraph (mini-markup de reportlab).
+            arows.append([e.match, Paragraph(escape(e.reason or "—"), small), e.approved_by or "—", e.expires or "—"])
         atbl = Table(arows, colWidths=[40 * mm, 72 * mm, 30 * mm, 20 * mm])
         atbl.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8590c")),
