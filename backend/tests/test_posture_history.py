@@ -143,10 +143,12 @@ async def test_serie_ordenada_y_contrato(env):
     c, h = env
     body = (await c.get("/api/v1/projects/p/history", headers=h["viewer"])).json()
     assert body["project_key"] == "p"
+    assert "window_days" in body
     pcts = [s["compliance_pct"] for s in body["snapshots"]]
     assert pcts == [50.0, 51.0, 52.0]
     assert set(body["snapshots"][0]) == {
-        "captured_at", "compliance_pct", "band", "crit", "high", "med", "low", "coverage_pct"}
+        "captured_at", "compliance_pct", "band", "crit", "high", "med", "low",
+        "coverage_pct", "rubric_version"}
 
 
 async def test_limit_devuelve_las_mas_recientes_ascendentes(env):
@@ -160,3 +162,60 @@ async def test_proyecto_sin_snapshots_lista_vacia(env):
     c, h = env
     body = (await c.get("/api/v1/projects/empty/history", headers=h["viewer"])).json()
     assert body["snapshots"] == []
+
+
+async def test_days_acota_la_ventana(env):
+    # Los datos del fixture son de hace ~10 meses: days=7 no devuelve ninguno,
+    # sin days (ilimitado en enterprise) devuelve los 3.
+    c, h = env
+    recent = (await c.get("/api/v1/projects/p/history?days=7", headers=h["viewer"])).json()
+    assert recent["snapshots"] == [] and recent["window_days"] == 7
+    allp = (await c.get("/api/v1/projects/p/history", headers=h["viewer"])).json()
+    assert len(allp["snapshots"]) == 3
+    assert (await c.get("/api/v1/projects/p/history?days=0", headers=h["viewer"])).status_code == 422
+
+
+async def test_rubric_version_se_captura(session):
+    written, _ = await svc.capture_snapshots(session, _StubAgg(), CFG)
+    assert written == 1
+    row = (await session.execute(select(PostureSnapshot))).scalar_one()
+    assert isinstance(row.rubric_version, str) and row.rubric_version  # rúbrica vigente
+
+
+def test_effective_window_clamp_por_edicion():
+    s = get_settings()
+    prev = s.edition
+    try:
+        s.edition = "community"  # topa en 30 días
+        assert svc.effective_window_days(90) == 30
+        assert svc.effective_window_days(7) == 7
+        assert svc.effective_window_days(None) == 30
+        s.edition = "enterprise"  # sin tope: respeta lo pedido, None = ilimitado
+        assert svc.effective_window_days(90) == 90
+        assert svc.effective_window_days(None) is None
+    finally:
+        s.edition = prev
+
+
+async def test_spark_series_por_proyecto(session):
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    for i in range(3):
+        session.add(PostureSnapshot(project_key="p", captured_at=base + timedelta(days=i),
+                                    compliance_pct=60.0 + i, band="en_riesgo",
+                                    crit=0, high=0, med=0, low=0, coverage_pct=90.0))
+    session.add(PostureSnapshot(project_key="q", captured_at=base, compliance_pct=42.0,
+                                band="critico", crit=1, high=0, med=0, low=0, coverage_pct=50.0))
+    await session.commit()
+    window, series = await svc.list_spark(session)
+    assert window is None  # enterprise: ilimitado
+    assert series["p"] == [60.0, 61.0, 62.0]  # ascendente por captured_at
+    assert series["q"] == [42.0]
+
+
+async def test_spark_endpoint_contrato(env):
+    c, h = env
+    r = await c.get("/api/v1/projects/history/spark", headers=h["viewer"])
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"window_days", "series"}
+    assert body["series"]["p"] == [50.0, 51.0, 52.0]

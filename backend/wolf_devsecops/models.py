@@ -401,11 +401,20 @@ class PostureSnapshot(BaseModel):
     med: int
     low: int
     coverage_pct: float | None = None
+    rubric_version: str | None = None  # rúbrica vigente al capturar (marca cambios)
 
 
 class PostureHistory(BaseModel):
     project_key: str
+    window_days: int | None = None  # ventana efectiva aplicada (None = ilimitada, Pro)
     snapshots: list[PostureSnapshot] = []  # orden ascendente por captured_at
+
+
+class PostureSparklines(BaseModel):
+    """Series compactas de % de cumplimiento por proyecto para los sparklines del
+    dashboard. Una sola consulta a BD (ADR-012: nunca golpea las fuentes)."""
+    window_days: int | None = None
+    series: dict[str, list[float]] = {}  # key → [compliance_pct ascendente]
 
 
 # ─── Notificaciones (campana + reporte de avance) ────────────────────────────

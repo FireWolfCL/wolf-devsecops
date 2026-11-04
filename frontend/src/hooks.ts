@@ -1,9 +1,9 @@
 // Hooks de datos. Sin librería externa: fetch + estado, suficiente para el MVP.
 import { useCallback, useEffect, useState } from "react";
 
-import { fetchMeta, fetchPosture, fetchProject, fetchProjects, fetchReport, fetchTool } from "./api/client";
+import { fetchMeta, fetchPosture, fetchProject, fetchProjects, fetchReport, fetchSpark, fetchTool } from "./api/client";
 import type { Meta, ToolName } from "./api/client";
-import type { PostureOverview, ProjectListItem, ProjectReport, ProjectSummary, ToolDashboard } from "./api/types";
+import type { PostureOverview, PostureSparklines, ProjectListItem, ProjectReport, ProjectSummary, ToolDashboard } from "./api/types";
 
 export interface AsyncState<T> {
   data: T | null;
@@ -64,4 +64,10 @@ export function usePosture(): AsyncState<PostureOverview> {
 
 export function useTool(tool: ToolName): AsyncState<ToolDashboard> {
   return useAsync(() => fetchTool(tool), [tool]);
+}
+
+/** Sparklines de tendencia para las tarjetas del dashboard. Es decorativo: si
+ *  falla no rompe la lista, solo no se dibuja la mini-línea. */
+export function useSpark(days?: number): AsyncState<PostureSparklines> {
+  return useAsync(() => fetchSpark(days), [days]);
 }

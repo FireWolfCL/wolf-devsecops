@@ -31,3 +31,8 @@ class PostureSnapshot(Base):
     med: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     low: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     coverage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Versión de la rúbrica vigente al capturar (POSTURE-RUBRIC.md). Nullable:
+    # las filas anteriores a 0008 no la tienen. Sirve para marcar en la tendencia
+    # los puntos donde cambió la rúbrica (un salto de score puede deberse a eso,
+    # no a una regresión real).
+    rubric_version: Mapped[str | None] = mapped_column(String(40), nullable=True)

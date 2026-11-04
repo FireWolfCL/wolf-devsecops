@@ -704,6 +704,24 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .hist-table th, .hist-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .hist-table td.num, .hist-table th.num { text-align: right; font-family: var(--mono); }
 .hist-scroll { overflow-x: auto; }
+/* Selector de rango (7/30/90) y aviso de recorte Community. */
+.hist-range { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+.hist-range .btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.hist-clamp { font-size: 12px; margin-left: 6px; }
+/* Delta con dirección. */
+.trend-up { color: var(--accent); }
+.trend-down { color: var(--danger); }
+.trend-flat { color: var(--muted); }
+/* Marca de cambio de rúbrica en la gráfica. */
+.hist-chart .rubric-mark line { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .8; }
+.hist-chart .rubric-mark polygon { fill: var(--warn); }
+.hist-legend .rubric-legend i { border-radius: 2px; background: var(--warn); }
+
+/* ── Sparkline de tendencia en las tarjetas del dashboard ─────────────────── */
+.pcard-trend { display: flex; align-items: center; gap: 8px; margin: 2px 0 2px; }
+.spark { width: 96px; height: 26px; flex: 0 0 auto; }
+.spark .spark-line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pcard-trend .trend-d { font-size: 12px; font-weight: 600; }
 
 /* ── Revisión IA de código (side-by-side) ──────────────────────────────────── */
 .cr-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; align-items: start; }

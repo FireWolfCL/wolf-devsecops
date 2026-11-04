@@ -34,12 +34,13 @@ function shortDate(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function LineChart({ points, series, yMax, ariaLabel, fromTo }: {
+function LineChart({ points, series, yMax, ariaLabel, fromTo, rubricMarks }: {
   points: PostureSnapshot[];
   series: Series[];
   yMax: number;
   ariaLabel: string;
   fromTo: string;
+  rubricMarks: { i: number; from: string; to: string }[];
 }) {
   const times = points.map((p) => new Date(p.captured_at).getTime());
   const t0 = Math.min(...times);
@@ -55,6 +56,15 @@ function LineChart({ points, series, yMax, ariaLabel, fromTo }: {
         <g key={tk}>
           <line className="grid" x1={PAD.l} x2={W - PAD.r} y1={y(tk)} y2={y(tk)} />
           <text className="axis-t" x={PAD.l - 6} y={y(tk) + 4} textAnchor="end">{tk}</text>
+        </g>
+      ))}
+      {/* Marcas donde cambió la rúbrica: un salto de score aquí puede deberse al
+          cambio de criterios, no a una regresión real. */}
+      {rubricMarks.map((m) => (
+        <g key={`rv-${m.i}`} className="rubric-mark">
+          <line x1={x(m.i)} x2={x(m.i)} y1={PAD.t} y2={H - PAD.b} />
+          <polygon points={`${x(m.i) - 4},${PAD.t} ${x(m.i) + 4},${PAD.t} ${x(m.i)},${PAD.t + 6}`} />
+          <title>{`${m.from} → ${m.to}`}</title>
         </g>
       ))}
       <text className="axis-t" x={PAD.l} y={H - 8} textAnchor="start">{shortDate(t0)}</text>
@@ -99,17 +109,20 @@ function sevSeries(points: PostureSnapshot[], t: TFn): Series[] {
   ];
 }
 
+const RANGES = [7, 30, 90] as const;
+
 export function PostureHistoryView({ projectKey, onBack }: { projectKey: string; onBack: () => void }) {
   const t = useT();
+  const [days, setDays] = useState<number>(30);
   const res = useAsync(
     () =>
-      fetchHistory(projectKey)
+      fetchHistory(projectKey, days)
         .then((h) => ({ h, notFound: false }))
         .catch((e: unknown) => {
           if (e instanceof ApiError && e.status === 404) return { h: null, notFound: true };
           throw e;
         }),
-    [projectKey],
+    [projectKey, days],
   );
   const { loading, error, reload } = res;
   const data = res.data?.h ?? null;
@@ -121,8 +134,33 @@ export function PostureHistoryView({ projectKey, onBack }: { projectKey: string;
     [data],
   );
   const last = points.length ? points[points.length - 1] : null;
-  const prev = points.length > 1 ? points[points.length - 2] : null;
-  const delta = last && prev ? last.compliance_pct - prev.compliance_pct : null;
+  // Delta semana-a-semana: último − el punto más cercano a 7 días antes del último
+  // (no el punto anterior sin más, que podría ser de ayer o de hace un mes).
+  const weekDelta = useMemo(() => {
+    if (!last || points.length < 2) return null;
+    const tLast = new Date(last.captured_at).getTime();
+    const target = tLast - 7 * 24 * 3600 * 1000;
+    let ref: PostureSnapshot | null = null;
+    for (const p of points) {
+      if (p === last) break;
+      const tp = new Date(p.captured_at).getTime();
+      if (tp <= target) ref = p;  // el más reciente en/antes del corte de 7 días
+    }
+    if (!ref) ref = points[0];  // sin punto a 7 días: usa el primero de la ventana
+    return ref === last ? null : last.compliance_pct - ref.compliance_pct;
+  }, [points, last]);
+  // Índices donde cambió la rúbrica entre dos puntos consecutivos.
+  const rubricMarks = useMemo(() => {
+    const out: { i: number; from: string; to: string }[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1].rubric_version;
+      const b = points[i].rubric_version;
+      if (a && b && a !== b) out.push({ i, from: a, to: b });
+    }
+    return out;
+  }, [points]);
+  // Community recorta la ventana (p.ej. 90→30): avisar cuando se pidió más.
+  const clamped = data?.window_days != null && data.window_days < days;
 
   const errMsg = error;
 
@@ -154,6 +192,15 @@ export function PostureHistoryView({ projectKey, onBack }: { projectKey: string;
       </div>
       <p className="muted">{t("hist.subtitle", { name: projectKey })}</p>
 
+      <div className="hist-range" role="group" aria-label={t("hist.rangeAria")}>
+        {RANGES.map((d) => (
+          <button key={d} type="button" className="btn sm" aria-pressed={days === d} onClick={() => setDays(d)}>
+            {t("hist.rangeDays", { n: d })}
+          </button>
+        ))}
+        {clamped && <span className="muted hist-clamp">{t("hist.clamped", { n: data?.window_days ?? 0 })}</span>}
+      </div>
+
       {loading && !res.data && <p className="state" aria-busy="true">{t("hist.loadingAria")}…</p>}
       {notFound && <div className="alert err" role="alert">{t("hist.notFound", { key: projectKey })}</div>}
       {errMsg && (
@@ -172,8 +219,10 @@ export function PostureHistoryView({ projectKey, onBack }: { projectKey: string;
               <div className="k">{t("hist.current")} · {t("hist.compliance")}</div>
               <div className="v">{fmtPct(last.compliance_pct)}</div>
               <BandPill band={last.band} />
-              {delta != null && (
-                <div className="d">{t("hist.delta", { d: `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` })}</div>
+              {weekDelta != null && (
+                <div className={`d trend-${weekDelta > 0 ? "up" : weekDelta < 0 ? "down" : "flat"}`}>
+                  {t("hist.deltaWeek", { d: `${weekDelta > 0 ? "+" : ""}${weekDelta.toFixed(1)}` })}
+                </div>
               )}
             </div>
             <div className="hist-stat">
@@ -215,14 +264,16 @@ export function PostureHistoryView({ projectKey, onBack }: { projectKey: string;
                   yMax={yMax}
                   ariaLabel={t("hist.chartAria", { what, key: projectKey })}
                   fromTo={t("hist.xRange", { from: fmtDate(points[0].captured_at), to: fmtDate(last.captured_at) })}
+                  rubricMarks={rubricMarks}
                 />
-                {view === "severity" && (
-                  <div className="hist-legend">
-                    {series.map((s) => (
-                      <span key={s.id}><i style={{ background: s.color }} aria-hidden="true" />{s.label}</span>
-                    ))}
-                  </div>
-                )}
+                <div className="hist-legend">
+                  {view === "severity" && series.map((s) => (
+                    <span key={s.id}><i style={{ background: s.color }} aria-hidden="true" />{s.label}</span>
+                  ))}
+                  {rubricMarks.length > 0 && (
+                    <span className="rubric-legend"><i aria-hidden="true" />{t("hist.rubricChanged")}</span>
+                  )}
+                </div>
               </div>
             </>
           )}

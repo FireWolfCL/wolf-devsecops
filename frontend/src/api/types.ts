@@ -490,7 +490,7 @@ export interface ModuleTree {
   truncated: boolean;
 }
 
-// ─── Tendencia histórica (GET /api/v1/projects/{key}/history?limit=N) ────────
+// ─── Tendencia histórica (GET /api/v1/projects/{key}/history?days=N) ─────────
 export interface PostureSnapshot {
   /** ISO 8601. */
   captured_at: string;
@@ -501,12 +501,23 @@ export interface PostureSnapshot {
   med: number;
   low: number;
   coverage_pct: number | null;
+  /** Rúbrica vigente al capturar; cambia → se marca en la tendencia. */
+  rubric_version?: string | null;
 }
 
 export interface PostureHistory {
   project_key: string;
+  /** Ventana efectiva aplicada (días); null = ilimitada (Pro). */
+  window_days?: number | null;
   /** Orden ascendente por captured_at; puede venir vacío. */
   snapshots: PostureSnapshot[];
+}
+
+// ─── Sparklines del dashboard (GET /api/v1/projects/history/spark?days=N) ────
+export interface PostureSparklines {
+  window_days?: number | null;
+  /** key → serie de % de cumplimiento ascendente por captured_at. */
+  series: Record<string, number[]>;
 }
 
 // ─── Feature B: propuesta de fix con código (ADR-018) ───────────────────────

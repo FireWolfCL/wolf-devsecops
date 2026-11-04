@@ -12,6 +12,7 @@ import type {
   UnreadCount,
   ModuleTree,
   PostureHistory,
+  PostureSparklines,
   PostureOverview,
   ProjectListItem,
   ProjectReport,
@@ -60,11 +61,17 @@ export function fetchCodemap(key: string): Promise<ModuleTree> {
   return request<ModuleTree>(`/api/v1/projects/${encodeURIComponent(key)}/codemap`);
 }
 
-// 404 = el proyecto no existe; `snapshots` puede venir vacío.
-export function fetchHistory(key: string, limit = 90): Promise<PostureHistory> {
-  return request<PostureHistory>(
-    `/api/v1/projects/${encodeURIComponent(key)}/history?limit=${encodeURIComponent(String(limit))}`,
-  );
+// 404 = el proyecto no existe; `snapshots` puede venir vacío. `days` acota la
+// ventana (7/30/90); la edición Community la recorta a 30d en el backend.
+export function fetchHistory(key: string, days?: number): Promise<PostureHistory> {
+  const qs = days != null ? `?days=${encodeURIComponent(String(days))}` : "";
+  return request<PostureHistory>(`/api/v1/projects/${encodeURIComponent(key)}/history${qs}`);
+}
+
+// Series de % por proyecto para los sparklines del dashboard (una sola llamada).
+export function fetchSpark(days?: number): Promise<PostureSparklines> {
+  const qs = days != null ? `?days=${encodeURIComponent(String(days))}` : "";
+  return request<PostureSparklines>(`/api/v1/projects/history/spark${qs}`);
 }
 
 export interface Meta {

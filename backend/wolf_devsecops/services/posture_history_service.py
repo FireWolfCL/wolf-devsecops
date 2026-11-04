@@ -51,6 +51,7 @@ def row_from_summary(summary: ProjectSummary, *, now: datetime | None = None) ->
         med=med,
         low=low,
         coverage_pct=float(posture.coverage),
+        rubric_version=posture.rubric_version,
     )
 
 
@@ -82,16 +83,33 @@ async def capture_snapshots(
     return written, skipped
 
 
+def effective_window_days(days: int | None) -> int | None:
+    """Ventana efectiva: el `days` pedido acotado por el tope de la edición.
+
+    Community topa en `COMMUNITY_HISTORY_DAYS` (p.ej. 30): pedir 90 se recorta a 30.
+    Pro/Enterprise (`history.unlimited`) no tienen tope, así que respetan el `days`
+    pedido tal cual, y sin `days` devuelven todo (None).
+    """
+    cap = edition.history_window_days()
+    if cap is None:
+        return days  # Pro+: sin tope; None = ilimitado
+    return cap if days is None else min(days, cap)
+
+
 async def list_history(
-    session: AsyncSession, project_key: str, limit: int | None = None
+    session: AsyncSession,
+    project_key: str,
+    limit: int | None = None,
+    days: int | None = None,
 ) -> list[PostureSnapshotRow]:
     """Serie ascendente por captured_at. Con `limit`, las N más RECIENTES (aun así ascendentes).
 
     Ventana por edición (feature Pro `history.unlimited`): en Community solo se
     devuelven los snapshots de los últimos N días; Pro/Enterprise = ilimitado.
+    `days` acota adicionalmente la ventana (p.ej. 7/30/90 del selector del panel).
     """
     q = select(PostureSnapshotRow).where(PostureSnapshotRow.project_key == project_key)
-    window_days = edition.history_window_days()
+    window_days = effective_window_days(days)
     if window_days is not None:
         cutoff = datetime.now(UTC) - timedelta(days=window_days)
         q = q.where(PostureSnapshotRow.captured_at >= cutoff)
@@ -102,3 +120,26 @@ async def list_history(
         return rows
     q = q.order_by(PostureSnapshotRow.captured_at.asc())
     return list((await session.execute(q)).scalars())
+
+
+async def list_spark(
+    session: AsyncSession, days: int | None = None
+) -> tuple[int | None, dict[str, list[float]]]:
+    """Series compactas de % de cumplimiento por proyecto (una sola consulta).
+
+    Devuelve (ventana_efectiva, {key: [compliance ascendente]}). Alimenta los
+    sparklines del dashboard sin N llamadas ni golpear las fuentes (ADR-012).
+    """
+    window_days = effective_window_days(days)
+    q = select(
+        PostureSnapshotRow.project_key,
+        PostureSnapshotRow.compliance_pct,
+    )
+    if window_days is not None:
+        cutoff = datetime.now(UTC) - timedelta(days=window_days)
+        q = q.where(PostureSnapshotRow.captured_at >= cutoff)
+    q = q.order_by(PostureSnapshotRow.project_key.asc(), PostureSnapshotRow.captured_at.asc())
+    series: dict[str, list[float]] = {}
+    for key, pct in (await session.execute(q)).all():
+        series.setdefault(key, []).append(float(pct))
+    return window_days, series

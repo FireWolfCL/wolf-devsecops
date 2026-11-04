@@ -14,9 +14,35 @@ import {
   SourceChip,
   bandOf,
 } from "../components/posture";
-import { usePosture, useProjects } from "../hooks";
+import { usePosture, useProjects, useSpark } from "../hooks";
 import { useT } from "../i18n";
 import { stagger } from "../motion";
+
+// ─── Sparkline de tendencia (mini-línea del % de postura) ────────────────────
+// SVG inline, sin dependencias. Decorativo: con <2 puntos no dibuja nada. El
+// color sigue la banda actual de la tarjeta. El delta es el último − el primero
+// de la ventana (sube/baja en el periodo).
+function Sparkline({ values, band, label }: { values: number[]; band: string; label: string }) {
+  if (values.length < 2) return null;
+  const W = 96;
+  const H = 26;
+  const P = 3;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const n = values.length;
+  const x = (i: number) => P + (i / (n - 1)) * (W - 2 * P);
+  const y = (v: number) => P + (1 - (v - min) / span) * (H - 2 * P);
+  const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const lastI = n - 1;
+  const color = `var(--b-${band === "sin_datos" || band === "evidencia_insuficiente" ? "neutral" : band})`;
+  return (
+    <svg className="spark" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} style={{ color }}>
+      <path className="spark-line" d={d} fill="none" stroke="currentColor" />
+      <circle cx={x(lastI)} cy={y(values[lastI])} r={2.4} fill="currentColor" />
+    </svg>
+  );
+}
 
 // ─── Hero ────────────────────────────────────────────────────────────────────
 function HeroSkeleton() {
@@ -206,11 +232,14 @@ const NOTE_KEY: Record<SourceStatus, string | null> = {
   not_configured: "list.note.not_configured",
 };
 
-function ProjectCard({ item, index, onSelect }: { item: ProjectListItem; index: number; onSelect: (key: string) => void }) {
+function ProjectCard({ item, index, spark, onSelect }: { item: ProjectListItem; index: number; spark?: number[]; onSelect: (key: string) => void }) {
   const t = useT();
   const band = bandOf(item.posture_band);
   const noteKey = NOTE_KEY[item.worst_source_status];
   const note = noteKey ? t(noteKey) : null;
+  // Delta de la ventana: último − primero del sparkline (tendencia del periodo).
+  const trend = spark && spark.length >= 2 ? spark[spark.length - 1] - spark[0] : null;
+  const trendDir = trend == null ? "flat" : trend > 0.05 ? "up" : trend < -0.05 ? "down" : "flat";
   return (
     <article className={`pcard band-${band}`} style={stagger(index)}>
       <header className="pcard-head">
@@ -248,6 +277,21 @@ function ProjectCard({ item, index, onSelect }: { item: ProjectListItem; index: 
           compact
         />
       </div>
+
+      {spark && spark.length >= 2 && (
+        <div className={`pcard-trend trend-${trendDir}`}>
+          <Sparkline
+            values={spark}
+            band={band}
+            label={t("list.sparkAria", { name: item.name, n: spark.length })}
+          />
+          {trend != null && (
+            <span className="trend-d mono" title={t("list.trendTip")}>
+              {trend > 0 ? "▲" : trend < 0 ? "▼" : "▬"} {trend > 0 ? "+" : ""}{trend.toFixed(1)} pp
+            </span>
+          )}
+        </div>
+      )}
 
       <footer className="pcard-foot">
         <CiPill item={item} />
@@ -289,6 +333,8 @@ function CardSkeleton({ i }: { i: number }) {
 export function ProjectListView({ onSelect }: { onSelect: (key: string) => void }) {
   const { data, loading, error, reload } = useProjects();
   const posture = usePosture();
+  const spark = useSpark();  // decorativo: una sola llamada, alimenta todas las cards
+  const sparkSeries = spark.data?.series;
   const t = useT();
   const [query, setQuery] = useState("");
   const [bandFilter, setBandFilter] = useState<string | null>(null);
@@ -436,7 +482,7 @@ export function ProjectListView({ onSelect }: { onSelect: (key: string) => void 
             </span>
           </header>
           <div className="pgrid">
-            {g.items.map((p, i) => <ProjectCard key={p.key} item={p} index={i} onSelect={onSelect} />)}
+            {g.items.map((p, i) => <ProjectCard key={p.key} item={p} index={i} spark={sparkSeries?.[p.key]} onSelect={onSelect} />)}
           </div>
         </section>
       ))}
