@@ -262,11 +262,10 @@ export function ProjectDetailView({
   const t = useT();
   const { data, loading, error, reload } = useProjectSummary(projectKey);
 
-  // Forge del proyecto (CI + release): GitHub o GitLab (1.3). Sin github pero con
-  // gitlab → etiquetas y deep-link de GitLab.
-  const isGitlab = Boolean(data?.links?.gitlab) && !data?.links?.github;
-  const forgeName = isGitlab ? "GitLab" : "GitHub";
-  const forgeLink = data?.links?.github ?? data?.links?.gitlab;
+  // Forge del proyecto (CI + release): GitHub, GitLab (1.3) o Jenkins (1.4).
+  // Etiqueta y deep-link según cuál esté configurado (github gana si hay varios).
+  const forgeName = data?.links?.github ? "GitHub" : data?.links?.gitlab ? "GitLab" : data?.links?.jenkins ? "Jenkins" : "GitHub";
+  const forgeLink = data?.links?.github ?? data?.links?.gitlab ?? data?.links?.jenkins;
 
   const statuses: SourceStatus[] = data
     ? [data.ci.status, data.findings.status, data.containers?.status ?? "not_configured", data.quality.status, data.release.status]

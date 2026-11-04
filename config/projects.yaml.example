@@ -25,6 +25,10 @@ sources:
   # gitlab:
   #   base_url: "https://gitlab.com"
   #   token_env: "GITLAB_TOKEN"
+  # Jenkins como forge de CI (sin releases). token_env = "usuario:api_token".
+  # jenkins:
+  #   base_url: "https://jenkins.miempresa.com"
+  #   token_env: "JENKINS_TOKEN"
 
 # Proyectos a mostrar en la consola.
 projects:
@@ -55,3 +59,9 @@ projects:
   #     ref: "main"                   # opcional: rama para filtrar pipelines
   #   sonarqube:
   #     project_key: "mi-proyecto-gl"
+
+  # Ejemplo con Jenkins como forge de CI:
+  # - key: "mi-proyecto-jk"
+  #   name: "Mi Proyecto JK"
+  #   jenkins:
+  #     job: "carpeta/job/mi-pipeline"   # path del job (carpetas: usa /job/ entre niveles)

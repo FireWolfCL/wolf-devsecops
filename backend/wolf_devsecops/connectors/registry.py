@@ -11,6 +11,7 @@ from .defectdojo import DefectDojoConnector
 from .github import GitHubConnector
 from .gitlab import GitLabConnector
 from .harbor import HarborConnector
+from .jenkins import JenkinsConnector
 from .sonarqube import SonarQubeConnector
 from .trivy import TrivyConnector
 from .wss import WSSConnector
@@ -18,6 +19,7 @@ from .wss import WSSConnector
 CONNECTOR_REGISTRY: dict[str, type[Connector]] = {
     GitHubConnector.source_name: GitHubConnector,
     GitLabConnector.source_name: GitLabConnector,  # CI + release (forge alterno)
+    JenkinsConnector.source_name: JenkinsConnector,  # CI-only (sin releases)
     DefectDojoConnector.source_name: DefectDojoConnector,
     SonarQubeConnector.source_name: SonarQubeConnector,
     WSSConnector.source_name: WSSConnector,

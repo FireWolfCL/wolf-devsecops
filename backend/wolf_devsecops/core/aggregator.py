@@ -218,6 +218,9 @@ class Aggregator:
             if gl_base.endswith("/api/v4"):
                 gl_base = gl_base[: -len("/api/v4")].rstrip("/")
             links["gitlab"] = f"{gl_base}/{quote(project.gitlab.project, safe='/')}"
+        if project.jenkins and "jenkins" in self._config.sources:
+            jk_base = self._config.sources["jenkins"].url.rstrip("/")
+            links["jenkins"] = f"{jk_base}/job/{quote(project.jenkins.job, safe='/')}"
         return links
 
     # Qué enlace de proyecto corresponde a cada pestaña del dashboard de herramientas.
@@ -229,9 +232,9 @@ class Aggregator:
     }
 
     def _forge_source(self, project: ProjectConfig) -> str | None:
-        """Qué fuente provee CI/release: GitHub o GitLab (1.3). GitHub gana si ambos
-        están configurados. None = el proyecto no usa ningún forge."""
-        for name in ("github", "gitlab"):
+        """Qué fuente provee CI/release: GitHub, GitLab (1.3) o Jenkins (1.4, CI-only).
+        Prioridad github > gitlab > jenkins si hay varios. None = sin forge."""
+        for name in ("github", "gitlab", "jenkins"):
             if name in self._config.sources and self._project_uses(project, name):
                 return name
         return None

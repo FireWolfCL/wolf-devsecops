@@ -1,0 +1,9 @@
+{
+  "_class": "hudson.model.FreeStyleBuild",
+  "number": 128,
+  "result": "SUCCESS",
+  "building": false,
+  "timestamp": 1730630000000,
+  "duration": 123456,
+  "url": "https://jenkins.example.com/job/wolf-cloud/128/"
+}

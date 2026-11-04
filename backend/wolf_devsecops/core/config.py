@@ -46,6 +46,12 @@ class GitLabProjectConfig(BaseModel):
     ref: str | None = None
 
 
+class JenkinsProjectConfig(BaseModel):
+    # CI desde Jenkins (sin releases). `job` es el path del job; para jobs en
+    # carpetas usa "carpeta/job/hijo". Lee /job/<job>/lastBuild/api/json.
+    job: str
+
+
 class DefectDojoProjectConfig(BaseModel):
     product: str
 
@@ -77,6 +83,7 @@ class ProjectConfig(BaseModel):
     org: str = "Wolf"  # organización dueña (Wolf vs externas como lsst-it)
     github: GitHubProjectConfig | None = None
     gitlab: GitLabProjectConfig | None = None
+    jenkins: JenkinsProjectConfig | None = None
     defectdojo: DefectDojoProjectConfig | None = None
     sonarqube: SonarProjectConfig | None = None
     wss: WSSProjectConfig | None = None
