@@ -214,6 +214,11 @@ WOLF_ADMIN_EMAIL=
 POSTGRES_PASSWORD=$(rand_pw 24)
 SONAR_DB_PASSWORD=$(rand_pw 24)
 DD_DB_PASSWORD=$(rand_pw 24)
+# Secretos obligatorios de DefectDojo (standard/full) — el initializer los exige con \${...:?}.
+# Si faltan, el 'up' de standard aborta antes de levantar DefectDojo.
+DD_SECRET_KEY=$(rand_secret)
+DD_AES_KEY=$(rand_pw 32)
+DD_ADMIN_PASSWORD=$(rand_pw 18)
 # Reviewer IA desactivado por defecto (se activa en /admin/ia) / AI reviewer off by default:
 WOLF_AI_ENABLED=false
 WOLF_CORS_ORIGINS=http://localhost:8088
@@ -368,6 +373,14 @@ say "Parar (conserva datos): $DC -f $CF_REL down" \
     "Stop (keeps data):      $DC -f $CF_REL down"
 say "Borrar todo (¡datos!):  $DC -f $CF_REL down -v" \
     "Wipe everything (data!): $DC -f $CF_REL down -v"
+
+# ── 8) smoke test (semáforo) ─────────────────────────────────────────────────
+step "Smoke test" "Smoke test"
+if [ -f "$HERE/smoke.sh" ]; then
+  WOLF_LANG="$L" bash "$HERE/smoke.sh" --url "$URL" --compose "$COMPOSE_FILE" --lang "$L" || \
+    warn "El smoke test reportó avisos/fallos (ver arriba); revisa: $DC -f $CF_REL logs" \
+         "Smoke test reported warnings/failures (see above); check: $DC -f $CF_REL logs"
+fi
 
 if ask "¿Abrir el panel en el navegador?" "Open the panel in the browser?"; then
   (command -v open >/dev/null 2>&1 && open "$URL") || (command -v xdg-open >/dev/null 2>&1 && xdg-open "$URL") || true
