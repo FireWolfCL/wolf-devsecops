@@ -21,14 +21,13 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-COMPOSE_FILE="$HERE/docker-compose.install.yml"
 ENV_FILE="$HERE/.env"
 PROJECTS="$REPO/config/projects.yaml"
-PROJECTS_SEED="$REPO/config/projects.install.yaml"
 
-# ── idioma / language ────────────────────────────────────────────────────────
+# ── idioma / language · perfil / profile ─────────────────────────────────────
 L="es"
 ASSUME_YES="no"
+PROFILE=""                             # vacío = sin fijar (se pregunta o default standard)
 for a in "$@"; do
   case "$a" in
     --lang=en|--en) L="en" ;;
@@ -36,13 +35,22 @@ for a in "$@"; do
     --lang) : ;;                       # el valor llega como siguiente arg (abajo)
     en|es) L="$a" ;;
     --yes|-y) ASSUME_YES="yes" ;;
+    --profile=lite|--profile=standard|--profile=full) PROFILE="${a#--profile=}" ;;
+    --profile) : ;;                    # --profile <valor> (abajo)
+    lite|standard|full) PROFILE="$a" ;;
   esac
 done
-# --lang <valor>
+# --lang <valor> y --profile <valor>
 prev=""
-for a in "$@"; do [ "$prev" = "--lang" ] && L="$a"; prev="$a"; done
+for a in "$@"; do
+  [ "$prev" = "--lang" ] && L="$a"
+  [ "$prev" = "--profile" ] && PROFILE="$a"
+  prev="$a"
+done
 [ -n "${WOLF_LANG:-}" ] && L="$WOLF_LANG"
+[ -n "${WOLF_PROFILE:-}" ] && PROFILE="$WOLF_PROFILE"
 [ "$L" = "en" ] || L="es"
+case "$PROFILE" in lite|standard|full|"") : ;; *) PROFILE="" ;; esac  # valor inválido → se trata como sin fijar
 [ "${WOLF_ASSUME_YES:-}" = "1" ] && ASSUME_YES="yes"
 # sin TTY → no interactivo con defaults
 [ -t 0 ] || ASSUME_YES="yes"
@@ -81,6 +89,35 @@ if [ "$ASSUME_YES" != "yes" ] && [ -z "${WOLF_LANG:-}" ]; then
   printf "  Idioma / Language [1]: "; read -r li || true
   [ "$li" = "2" ] && L="en"
 fi
+
+# ── 0b) perfil interactivo si no vino fijado ─────────────────────────────────
+# lite = panel + Sonar + Trivy (≈2 GB) · standard = + DefectDojo (≈4-5 GB) ·
+# full = standard + Harbor (su instalador aparte).
+if [ -z "$PROFILE" ] && [ "$ASSUME_YES" != "yes" ]; then
+  say "\n  Perfil de instalación:" "\n  Install profile:"
+  say "  1) lite      — panel + SonarQube + Trivy        (~2 GB RAM, arranque rápido)" \
+      "  1) lite      — panel + SonarQube + Trivy        (~2 GB RAM, quick start)"
+  say "  2) standard  — + DefectDojo (gestión de hallazgos) (~4-5 GB RAM)" \
+      "  2) standard  — + DefectDojo (findings management)  (~4-5 GB RAM)"
+  say "  3) full      — standard + Harbor (registry, su instalador aparte)" \
+      "  3) full      — standard + Harbor (registry, its own installer)"
+  printf "  [2]: "; read -r pf || true
+  case "$pf" in 1) PROFILE="lite" ;; 3) PROFILE="full" ;; *) PROFILE="standard" ;; esac
+fi
+[ -n "$PROFILE" ] || PROFILE="standard"   # default no interactivo
+
+# Resuelve compose + semilla de proyectos según el perfil.
+case "$PROFILE" in
+  lite)
+    COMPOSE_FILE="$HERE/docker-compose.lite.yml"
+    PROJECTS_SEED="$REPO/config/projects.lite.yaml"
+    ;;
+  standard|full)
+    COMPOSE_FILE="$HERE/docker-compose.install.yml"
+    PROJECTS_SEED="$REPO/config/projects.install.yaml"
+    ;;
+esac
+ok "Perfil: $PROFILE" "Profile: $PROFILE"
 
 # ── 1) preflight ─────────────────────────────────────────────────────────────
 step "Requisitos previos" "Prerequisites"
@@ -151,8 +188,13 @@ fi
 
 # ── 4) levantar la suite ─────────────────────────────────────────────────────
 step "Levantando la suite (build + up)" "Bringing the suite up (build + up)"
-say "Esto construye las imágenes y descarga Sonar/DefectDojo/Trivy. La 1ª vez tarda varios minutos." \
-    "This builds the images and pulls Sonar/DefectDojo/Trivy. The first run takes several minutes."
+if [ "$PROFILE" = "lite" ]; then
+  say "Perfil lite: construye el panel + SonarQube + Trivy (sin DefectDojo). La 1ª vez tarda varios minutos." \
+      "lite profile: builds the panel + SonarQube + Trivy (no DefectDojo). The first run takes several minutes."
+else
+  say "Esto construye las imágenes y descarga Sonar/DefectDojo/Trivy. La 1ª vez tarda varios minutos." \
+      "This builds the images and pulls Sonar/DefectDojo/Trivy. The first run takes several minutes."
+fi
 ( cd "$REPO" && $DC -f "$COMPOSE_FILE" up -d --build )
 
 # ── 5) esperar salud ─────────────────────────────────────────────────────────
@@ -169,16 +211,40 @@ curl -fsS "$URL/" >/dev/null 2>&1 && ok "Frontend sirviendo en $URL" "Frontend s
 
 # ── 6) conectar fuentes (opcional) ───────────────────────────────────────────
 step "Conectar fuentes demo" "Connect demo sources"
-if ask "¿Emitir tokens y cablear SonarQube/DefectDojo/Trivy ahora? (provision-sources.sh)" \
-       "Issue tokens and wire SonarQube/DefectDojo/Trivy now? (provision-sources.sh)"; then
+if [ "$PROFILE" = "lite" ]; then
+  Q_ES="¿Emitir tokens y cablear SonarQube/Trivy ahora? (provision-sources.sh)"
+  Q_EN="Issue tokens and wire SonarQube/Trivy now? (provision-sources.sh)"
+else
+  Q_ES="¿Emitir tokens y cablear SonarQube/DefectDojo/Trivy ahora? (provision-sources.sh)"
+  Q_EN="Issue tokens and wire SonarQube/DefectDojo/Trivy now? (provision-sources.sh)"
+fi
+if ask "$Q_ES" "$Q_EN"; then
   if [ -x "$HERE/provision-sources.sh" ]; then
-    bash "$HERE/provision-sources.sh" || warn "provision-sources.sh terminó con avisos; puedes reintentarlo luego." "provision-sources.sh finished with warnings; you can re-run it later."
+    # WOLF_PROFILE permite que provision-sources.sh omita DefectDojo en lite.
+    WOLF_PROFILE="$PROFILE" bash "$HERE/provision-sources.sh" || warn "provision-sources.sh terminó con avisos; puedes reintentarlo luego." "provision-sources.sh finished with warnings; you can re-run it later."
   else
     warn "No encontré provision-sources.sh ejecutable." "provision-sources.sh not found/executable."
   fi
 else
   say "Sáltalo por ahora: conecta las fuentes desde el panel → Admin → Integraciones." \
       "Skipped: connect sources later from the panel → Admin → Integrations."
+fi
+
+# ── 6b) Harbor (solo perfil full) ────────────────────────────────────────────
+if [ "$PROFILE" = "full" ]; then
+  step "Harbor (registry de imágenes)" "Harbor (image registry)"
+  if [ -x "$HERE/harbor/setup-harbor.sh" ]; then
+    if ask "¿Instalar Harbor ahora con su instalador oficial? (deploy/harbor/setup-harbor.sh)" \
+           "Install Harbor now with its official installer? (deploy/harbor/setup-harbor.sh)"; then
+      bash "$HERE/harbor/setup-harbor.sh" || warn "setup-harbor.sh terminó con avisos; puedes reintentarlo luego." "setup-harbor.sh finished with warnings; you can re-run it later."
+    else
+      say "Sáltalo: luego corre  bash deploy/harbor/setup-harbor.sh" \
+          "Skipped: later run  bash deploy/harbor/setup-harbor.sh"
+    fi
+  else
+    warn "No encontré deploy/harbor/setup-harbor.sh; instala Harbor por separado (ver deploy/harbor/README.md)." \
+         "deploy/harbor/setup-harbor.sh not found; install Harbor separately (see deploy/harbor/README.md)."
+  fi
 fi
 
 # ── 7) resumen ───────────────────────────────────────────────────────────────
@@ -194,13 +260,20 @@ fi
 echo
 say "Primer login (flujo endurecido): 1) cambia la contraseña, 2) enrola MFA (QR + código TOTP)." \
     "First login (hardened flow): 1) change the password, 2) enroll MFA (QR + TOTP code)."
-say "Otros servicios: SonarQube :9000 · DefectDojo :8086 · Harbor :8085 (su instalador aparte)." \
-    "Other services: SonarQube :9000 · DefectDojo :8086 · Harbor :8085 (its own installer)."
+# Ruta del compose del perfil, relativa al repo, para los comandos de abajo.
+CF_REL="deploy/$(basename "$COMPOSE_FILE")"
+if [ "$PROFILE" = "lite" ]; then
+  say "Otros servicios: SonarQube :9000. DefectDojo y Harbor: no incluidos en lite (sube a standard/full)." \
+      "Other services: SonarQube :9000. DefectDojo and Harbor: not in lite (move up to standard/full)."
+else
+  say "Otros servicios: SonarQube :9000 · DefectDojo :8086 · Harbor :8085 (su instalador aparte)." \
+      "Other services: SonarQube :9000 · DefectDojo :8086 · Harbor :8085 (its own installer)."
+fi
 echo
-say "Parar (conserva datos): $DC -f deploy/docker-compose.install.yml down" \
-    "Stop (keeps data):      $DC -f deploy/docker-compose.install.yml down"
-say "Borrar todo (¡datos!):  $DC -f deploy/docker-compose.install.yml down -v" \
-    "Wipe everything (data!): $DC -f deploy/docker-compose.install.yml down -v"
+say "Parar (conserva datos): $DC -f $CF_REL down" \
+    "Stop (keeps data):      $DC -f $CF_REL down"
+say "Borrar todo (¡datos!):  $DC -f $CF_REL down -v" \
+    "Wipe everything (data!): $DC -f $CF_REL down -v"
 
 if ask "¿Abrir el panel en el navegador?" "Open the panel in the browser?"; then
   (command -v open >/dev/null 2>&1 && open "$URL") || (command -v xdg-open >/dev/null 2>&1 && xdg-open "$URL") || true

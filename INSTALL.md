@@ -13,8 +13,9 @@
 ### Requisitos
 
 - **Docker Desktop** (o Docker Engine) con **Docker Compose v2** (`docker compose`).
-- **~4 GB de RAM libres** en Docker (SonarQube solo ya pide 2–3 GB). Súbelo en
-  *Docker Desktop → Settings → Resources* si hace falta.
+- **RAM libre en Docker según el perfil**: `lite` ~2 GB · `standard` ~4–5 GB ·
+  `full` ~6 GB+ (SonarQube solo ya pide 2–3 GB). Súbela en *Docker Desktop →
+  Settings → Resources* si hace falta. Ver [Perfiles](#perfiles-de-instalación).
 - macOS, Linux o Windows (con WSL2). En Apple Silicon todo corre nativo salvo
   DefectDojo, que va emulado (amd64) — ya está configurado.
 
@@ -44,8 +45,29 @@ pwsh deploy/install.ps1
 Modo no interactivo (CI / scripts):
 
 ```bash
-bash deploy/install.sh --yes --lang es
+bash deploy/install.sh --yes --lang es --profile standard
 ```
+
+### Perfiles de instalación
+
+El instalador te pregunta el **perfil** (o pásalo con `--profile`):
+
+| Perfil | Qué levanta | RAM aprox. | Para quién |
+|---|---|---|---|
+| `lite` | Panel + **SonarQube** + **Trivy** (sin DefectDojo) | **~2 GB** | Arrancar el día uno, máquinas modestas, demo rápida |
+| `standard` (default) | lite **+ DefectDojo** (gestión de hallazgos) | ~4–5 GB | Uso normal con triage de vulnerabilidades |
+| `full` | standard **+ Harbor** (registry; su instalador aparte) | ~6 GB+ | Escaneo de las imágenes que realmente despliegas |
+
+En `lite`, DefectDojo y Harbor aparecen como **“no configurados”** en el panel; se
+suman reinstalando en `standard`/`full` o conectando instancias propias desde
+**Admin → Integraciones**. Ejemplos:
+
+```bash
+bash deploy/install.sh --yes --profile lite       # liviano, ~2 GB
+bash deploy/install.sh --yes --profile full       # standard + Harbor
+```
+
+En Windows: `pwsh deploy/install.ps1 -Profile lite`.
 
 ### Qué hace el instalador
 
@@ -102,8 +124,9 @@ cambia el `base_url` de esa fuente por el tuyo y pon su token en `deploy/.env`.
 ### Requirements
 
 - **Docker Desktop** (or Docker Engine) with **Docker Compose v2** (`docker compose`).
-- **~4 GB free RAM** in Docker (SonarQube alone needs 2–3 GB). Raise it under
-  *Docker Desktop → Settings → Resources* if needed.
+- **Free RAM in Docker depends on the profile**: `lite` ~2 GB · `standard`
+  ~4–5 GB · `full` ~6 GB+ (SonarQube alone needs 2–3 GB). Raise it under *Docker
+  Desktop → Settings → Resources* if needed. See [Profiles](#install-profiles).
 - macOS, Linux or Windows (with WSL2). On Apple Silicon everything runs natively
   except DefectDojo, which runs emulated (amd64) — already configured.
 
@@ -133,8 +156,29 @@ pwsh deploy/install.ps1 -Lang en
 Non-interactive (CI / scripts):
 
 ```bash
-bash deploy/install.sh --yes --lang en
+bash deploy/install.sh --yes --lang en --profile standard
 ```
+
+### Install profiles
+
+The installer asks for a **profile** (or pass it with `--profile`):
+
+| Profile | What it brings up | Approx. RAM | For whom |
+|---|---|---|---|
+| `lite` | Panel + **SonarQube** + **Trivy** (no DefectDojo) | **~2 GB** | Day-one start, modest machines, quick demo |
+| `standard` (default) | lite **+ DefectDojo** (findings management) | ~4–5 GB | Normal use with vulnerability triage |
+| `full` | standard **+ Harbor** (registry; its own installer) | ~6 GB+ | Scanning the images you actually deploy |
+
+In `lite`, DefectDojo and Harbor show as **“not configured”** in the panel; add
+them by reinstalling as `standard`/`full` or by connecting your own instances from
+**Admin → Integrations**. Examples:
+
+```bash
+bash deploy/install.sh --yes --profile lite       # lightweight, ~2 GB
+bash deploy/install.sh --yes --profile full       # standard + Harbor
+```
+
+On Windows: `pwsh deploy/install.ps1 -Profile lite`.
 
 ### What the installer does
 

@@ -12,16 +12,17 @@
 [CmdletBinding()]
 param(
   [ValidateSet('es','en')] [string]$Lang = 'es',
+  [Alias('Profile')] [string]$InstallProfile = '',   # lite | standard | full ('' = preguntar)
   [switch]$Yes
 )
 $ErrorActionPreference = 'Stop'
 $Here  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Repo  = Split-Path -Parent $Here
-$Compose = Join-Path $Here 'docker-compose.install.yml'
 $EnvFile = Join-Path $Here '.env'
 $Projects = Join-Path $Repo 'config/projects.yaml'
-$Seed     = Join-Path $Repo 'config/projects.install.yaml'
 if ($env:WOLF_LANG) { $Lang = $env:WOLF_LANG }
+if ($env:WOLF_PROFILE) { $InstallProfile = $env:WOLF_PROFILE }
+if ($InstallProfile -notin @('lite','standard','full','')) { $InstallProfile = '' }
 
 function T($es,$en){ if($Lang -eq 'en'){$en}else{$es} }
 function Step($es,$en){ Write-Host "`n▸ $(T $es $en)" -ForegroundColor Cyan }
@@ -34,6 +35,26 @@ function RandSecret(){ RandPw 64 }
 function GenFernet(){ $b=New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); ([Convert]::ToBase64String($b)).Replace('+','-').Replace('/','_') }
 
 Write-Host "`n   🐺  Wolf DevSecOps — $(T 'instalador' 'guided install')`n" -ForegroundColor Cyan
+
+# 0b) perfil / profile
+if (-not $InstallProfile -and -not $Yes) {
+  Write-Host (T "`n  Perfil de instalación:" "`n  Install profile:")
+  Write-Host (T '  1) lite      — panel + SonarQube + Trivy        (~2 GB RAM, arranque rápido)' '  1) lite      — panel + SonarQube + Trivy        (~2 GB RAM, quick start)')
+  Write-Host (T '  2) standard  — + DefectDojo (gestión de hallazgos) (~4-5 GB RAM)' '  2) standard  — + DefectDojo (findings management)  (~4-5 GB RAM)')
+  Write-Host (T '  3) full      — standard + Harbor (su instalador aparte)' '  3) full      — standard + Harbor (its own installer)')
+  $pf = Read-Host '  [2]'
+  switch ($pf) { '1' { $InstallProfile = 'lite' } '3' { $InstallProfile = 'full' } default { $InstallProfile = 'standard' } }
+}
+if (-not $InstallProfile) { $InstallProfile = 'standard' }
+
+if ($InstallProfile -eq 'lite') {
+  $Compose = Join-Path $Here 'docker-compose.lite.yml'
+  $Seed    = Join-Path $Repo 'config/projects.lite.yaml'
+} else {
+  $Compose = Join-Path $Here 'docker-compose.install.yml'
+  $Seed    = Join-Path $Repo 'config/projects.install.yaml'
+}
+Ok "Perfil: $InstallProfile" "Profile: $InstallProfile"
 
 # 1) preflight
 Step 'Requisitos previos' 'Prerequisites'
@@ -81,6 +102,7 @@ else { Warn 'Sin plantilla; el panel arranca vacío.' 'No template; panel starts
 
 # 4) up
 Step 'Levantando la suite (build + up)' 'Bringing the suite up (build + up)'
+if ($InstallProfile -eq 'lite') { Write-Host (T 'Perfil lite: panel + SonarQube + Trivy (sin DefectDojo).' 'lite profile: panel + SonarQube + Trivy (no DefectDojo).') }
 Push-Location $Repo
 docker compose -f $Compose up -d --build
 Pop-Location
@@ -97,7 +119,13 @@ else { Warn 'El backend tardó demasiado; revisa: docker compose -f deploy/docke
 
 # 6) fuentes (provision-sources.sh es bash → WSL/Git Bash)
 Step 'Conectar fuentes demo' 'Connect demo sources'
-Warn 'Para cablear las fuentes demo corre en WSL/Git Bash: bash deploy/provision-sources.sh' 'To wire demo sources run in WSL/Git Bash: bash deploy/provision-sources.sh'
+Warn "Para cablear las fuentes demo corre en WSL/Git Bash: WOLF_PROFILE=$InstallProfile bash deploy/provision-sources.sh" "To wire demo sources run in WSL/Git Bash: WOLF_PROFILE=$InstallProfile bash deploy/provision-sources.sh"
+
+# 6b) Harbor (solo full)
+if ($InstallProfile -eq 'full') {
+  Step 'Harbor (registry de imágenes)' 'Harbor (image registry)'
+  Warn 'Instala Harbor con su instalador: bash deploy/harbor/setup-harbor.sh (WSL/Git Bash).' 'Install Harbor with its installer: bash deploy/harbor/setup-harbor.sh (WSL/Git Bash).'
+}
 
 # 7) resumen
 Step 'Listo' 'Done'
@@ -108,5 +136,6 @@ if ($AdminPw -ne '?') { Write-Host "   $(T 'Clave:  ' 'Password:') $AdminPw" }
 else { Write-Host "   $(T 'Clave:' 'Password:') $(T 'ver deploy/.env (WOLF_ADMIN_PASSWORD)' 'see deploy/.env (WOLF_ADMIN_PASSWORD)')" }
 Write-Host ''
 Write-Host (T 'Primer login: 1) cambia la contraseña, 2) enrola MFA (QR + TOTP).' 'First login: 1) change password, 2) enroll MFA (QR + TOTP).')
-Write-Host (T 'Parar: docker compose -f deploy/docker-compose.install.yml down' 'Stop: docker compose -f deploy/docker-compose.install.yml down')
+$cfRel = 'deploy/' + (Split-Path -Leaf $Compose)
+Write-Host (T "Parar: docker compose -f $cfRel down" "Stop: docker compose -f $cfRel down")
 if (Ask '¿Abrir el panel en el navegador?' 'Open the panel in the browser?') { Start-Process $url }

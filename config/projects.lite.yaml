@@ -1,0 +1,37 @@
+# =============================================================================
+# config/projects.yaml — generado por la INSTALACIÓN LITE (panel + Sonar + Trivy).
+# -----------------------------------------------------------------------------
+# Solo declara las fuentes que el perfil lite levanta: GitHub (SaaS), SonarQube y
+# Trivy. DefectDojo y Harbor NO se declaran → el panel los muestra como "no
+# configurados" (una fuente ausente no se muestra). Para sumarlos: reinstala en
+# perfil standard/full, o conéctalos desde el panel → Admin → Integraciones.
+#
+# Sin secretos: solo el NOMBRE de la env var (token_env); los valores viven en
+# deploy/.env y los rellena deploy/provision-sources.sh.
+# =============================================================================
+sources:
+  # GitHub: SaaS, se conecta a uno existente (no se autogenera).
+  github:
+    api_url: "https://api.github.com"
+    token_env: "GITHUB_TOKEN"
+
+  # SonarQube generado por la instalación (servicio sonarqube:9000).
+  sonarqube:
+    base_url: "http://sonarqube:9000"
+    token_env: "SONAR_TOKEN"
+
+  # Trivy: reporte JSON real publicado por Nginx (servicio trivy:80).
+  trivy:
+    base_url: "http://trivy:80"
+    token_env: "TRIVY_TOKEN"
+
+projects:
+  - key: "wolf-cloud"
+    name: "Wolf-Cloud"
+    github:
+      repo: "FireWolfCL/Wolf-Cloud"
+      ci_workflow: "ci.yml"
+    sonarqube:
+      project_key: "wolf-cloud"
+    trivy:
+      report_path: "wolf-cloud.json"

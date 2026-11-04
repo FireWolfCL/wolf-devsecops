@@ -1,0 +1,209 @@
+# =============================================================================
+# Wolf DevSecOps — INSTALACIÓN LITE (panel + SonarQube + Trivy, sin DefectDojo).
+# -----------------------------------------------------------------------------
+# Perfil liviano para arrancar el día uno con poca RAM: NO levanta DefectDojo
+# (los ~7 contenedores Django/celery/redis/pg más pesados). La gestión de
+# hallazgos (DefectDojo) y Harbor quedan "no configuradas" en el panel; se
+# añaden luego subiendo a los perfiles standard/full o conectando instancias
+# propias desde Admin → Integraciones.
+#
+# DERIVADO de docker-compose.install.yml (esa es la fuente de verdad del perfil
+# completo): mismos servicios SALVO el cluster defectdojo-* y sus volúmenes.
+#
+# Flujo:
+#   1) bash deploy/install.sh --profile lite
+#      (o directo: docker compose -f deploy/docker-compose.lite.yml up -d --build)
+#   2) http://localhost:8088  →  panel con GitHub/SonarQube/Trivy
+#
+# Secretos y credenciales: deploy/.env (gitignored).
+# =============================================================================
+name: wolf-devsecops
+
+services:
+  # ═══ Wolf DevSecOps ═════════════════════════════════════════════════════════
+  db:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: wolf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wolf}
+      POSTGRES_DB: wolf_devsecops
+    volumes: [wolf_db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wolf -d wolf_devsecops"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build: ../backend
+    environment:
+      WOLF_ENVIRONMENT: production
+      WOLF_EDITION: ${WOLF_EDITION:-community}
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      DB_HOST: db
+      DB_PORT: "5432"
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:?falta WOLF_JWT_SECRET en deploy/.env}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:?falta WOLF_MFA_FERNET_KEY en deploy/.env}
+      WOLF_CORS_ORIGINS: ${WOLF_CORS_ORIGINS:-http://localhost:8088}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_AI_ENABLED: ${WOLF_AI_ENABLED:-false}
+      WOLF_ADMIN_USERNAME: ${WOLF_ADMIN_USERNAME:-admin}
+      WOLF_ADMIN_PASSWORD: ${WOLF_ADMIN_PASSWORD:?falta WOLF_ADMIN_PASSWORD en deploy/.env}
+      WOLF_ADMIN_EMAIL: ${WOLF_ADMIN_EMAIL:-}
+      # Tokens de las fuentes (valores en .env; los rellena provision-sources.sh).
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-}
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+      WOLF_TELEGRAM_BOT_TOKEN: ${WOLF_TELEGRAM_BOT_TOKEN:-}
+      WOLF_TELEGRAM_CHAT_ID: ${WOLF_TELEGRAM_CHAT_ID:-}
+      WOLF_NOTIFY_LANG: ${WOLF_NOTIFY_LANG:-es}
+      WOLF_NOTIFY_MIN_SEVERITY: ${WOLF_NOTIFY_MIN_SEVERITY:-good}
+      WOLF_SMTP_HOST: ${WOLF_SMTP_HOST:-}
+      WOLF_SMTP_PORT: ${WOLF_SMTP_PORT:-587}
+      WOLF_SMTP_USER: ${WOLF_SMTP_USER:-}
+      WOLF_SMTP_PASSWORD: ${WOLF_SMTP_PASSWORD:-}
+      WOLF_SMTP_FROM: ${WOLF_SMTP_FROM:-}
+      WOLF_SMTP_STARTTLS: ${WOLF_SMTP_STARTTLS:-true}
+      WOLF_NOTIFY_EMAIL_TO: ${WOLF_NOTIFY_EMAIL_TO:-}
+    volumes:
+      - ../config:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # para alcanzar Harbor publicado en el host
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══ Scheduler (item M): snapshot de postura + notificaciones, periódico ═════
+  scheduler:
+    build: ../backend
+    entrypoint: ["wolf-devsecops"]
+    command: ["scheduler"]
+    healthcheck:
+      disable: true
+    environment:
+      WOLF_EDITION: ${WOLF_EDITION:-community}
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:-}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:-}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_SNAPSHOT_INTERVAL_SECONDS: ${WOLF_SNAPSHOT_INTERVAL_SECONDS:-3600}
+      WOLF_AUDIT_RETENTION_DAYS: ${WOLF_AUDIT_RETENTION_DAYS:-0}
+      WOLF_NOTIFY_LANG: ${WOLF_NOTIFY_LANG:-es}
+      WOLF_NOTIFY_MIN_SEVERITY: ${WOLF_NOTIFY_MIN_SEVERITY:-good}
+      WOLF_TELEGRAM_BOT_TOKEN: ${WOLF_TELEGRAM_BOT_TOKEN:-}
+      WOLF_TELEGRAM_CHAT_ID: ${WOLF_TELEGRAM_CHAT_ID:-}
+      WOLF_SMTP_HOST: ${WOLF_SMTP_HOST:-}
+      WOLF_SMTP_PORT: ${WOLF_SMTP_PORT:-587}
+      WOLF_SMTP_USER: ${WOLF_SMTP_USER:-}
+      WOLF_SMTP_PASSWORD: ${WOLF_SMTP_PASSWORD:-}
+      WOLF_SMTP_FROM: ${WOLF_SMTP_FROM:-}
+      WOLF_SMTP_STARTTLS: ${WOLF_SMTP_STARTTLS:-true}
+      WOLF_NOTIFY_EMAIL_TO: ${WOLF_NOTIFY_EMAIL_TO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-}
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  # ═══ Bot de Telegram (consulta de estatus) ═══════════════════════════════════
+  bot:
+    build: ../backend
+    entrypoint: ["wolf-devsecops"]
+    command: ["bot"]
+    healthcheck:
+      disable: true
+    environment:
+      WOLF_EDITION: ${WOLF_EDITION:-community}
+      WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
+      WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:-}
+      WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:-}
+      WOLF_CONFIG_PATH: /config/projects.yaml
+      WOLF_NOTIFY_LANG: ${WOLF_NOTIFY_LANG:-es}
+      WOLF_TELEGRAM_BOT_TOKEN: ${WOLF_TELEGRAM_BOT_TOKEN:-}
+      WOLF_TELEGRAM_CHAT_ID: ${WOLF_TELEGRAM_CHAT_ID:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DEFECTDOJO_TOKEN: ${DEFECTDOJO_TOKEN:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-}
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+    volumes:
+      - ../config:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: on-failure
+
+  frontend:
+    build: ../frontend
+    ports: ["8088:8080"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+  # ═══ SonarQube (SAST / calidad) ═════════════════════════════════════════════
+  sonarqube:
+    image: sonarqube:10.7-community
+    depends_on: [sonar-db]
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:-sonar}
+    ports: ["9000:9000"]
+    volumes: [sonarqube_data:/opt/sonarqube/data, sonarqube_ext:/opt/sonarqube/extensions]
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    restart: unless-stopped
+
+  sonar-db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:-sonar}
+      POSTGRES_DB: sonar
+    volumes: [sonar_db:/var/lib/postgresql/data]
+    restart: unless-stopped
+
+  # ═══ Trivy (escaneo de contenedor REAL → reporte JSON servido por Nginx) ═════
+  trivy-scan:
+    image: aquasec/trivy:0.56.2
+    volumes:
+      - trivy_reports:/reports
+      - trivy_cache:/root/.cache
+    command: >-
+      image --quiet --scanners vuln --format json
+      --output /reports/wolf-cloud.json python:3.9-slim
+    restart: "no"
+
+  trivy:
+    image: nginx:1.27-alpine
+    volumes:
+      - trivy_reports:/usr/share/nginx/html:ro
+    depends_on:
+      trivy-scan:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  wolf_db:
+  sonarqube_data:
+  sonarqube_ext:
+  sonar_db:
+  trivy_reports:
+  trivy_cache:
