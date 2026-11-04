@@ -69,6 +69,33 @@ bash deploy/install.sh --yes --profile full       # standard + Harbor
 
 En Windows: `pwsh deploy/install.ps1 -Profile lite`.
 
+### Pilar Contenedores: Harbor (productivo) vs Trivy suelto (fallback)
+
+El pilar **Contenedores** tiene dos caminos. Elige según si tienes un registry:
+
+| | **Harbor + trivy-adapter** (camino principal) | **Trivy suelto** (`deploy/scan-target.sh --image …`) |
+|---|---|---|
+| Qué escanea | Las imágenes que **realmente subes al registry y despliegas** | Una imagen que le indicas a mano, en tu máquina |
+| Cuándo usarlo | Tienes (o vas a tener) un registry y despliegas desde ahí | **No** tienes registry, o quieres un primer puntaje el día uno |
+| Perfil | `full` | `lite` y `standard` (ya viene incluido) |
+| Costo | **~10 contenedores** (core, portal, registry, jobservice, db, redis, proxy, trivy-adapter…), ~6 GB+ de RAM en total, y **su propio instalador**: `deploy/harbor/setup-harbor.sh` (no es un servicio del compose del panel) | Casi nulo: un contenedor `aquasec/trivy` efímero |
+| Re-escaneo | El trivy-adapter de Harbor re-escanea al subir una imagen | Lo corres tú cada vez |
+
+**Recomendación:** empieza con `lite` + Trivy suelto (semana 1, ver
+[docs/PRIMEROS-30-DIAS.md](docs/PRIMEROS-30-DIAS.md)) y pasa a **Harbor a partir del
+mes 2**, cuando ya operas el panel con soltura y tu flujo de despliegue pasa por un
+registry. Harbor es el flujo productivo; el Trivy suelto es el fallback.
+
+```bash
+bash deploy/install.sh --yes --profile full      # standard + ofrece instalar Harbor
+bash deploy/harbor/setup-harbor.sh               # o instalar/reintentar Harbor aparte
+bash deploy/provision-sources.sh                 # cablea Harbor al panel
+```
+
+Antes de instalar Harbor, define `HARBOR_ADMIN_PASSWORD` en `deploy/.env` (el instalador
+no la genera y `setup-harbor.sh` la exige). Detalles de Harbor (puerto `8085`, versión fijada, `docker compose down` propio):
+[`deploy/harbor/README.md`](deploy/harbor/README.md).
+
 ### Qué hace el instalador
 
 1. Verifica Docker + Compose.
@@ -109,6 +136,10 @@ docker compose -f deploy/docker-compose.install.yml down
 # Borrar TODO, incluidos los datos
 docker compose -f deploy/docker-compose.install.yml down -v
 ```
+
+**Backup, restore, actualizaciones y rotación de claves:** ver
+[docs/RUNBOOK.md](docs/RUNBOOK.md) (`deploy/backup.sh`, `deploy/restore.sh`).
+**¿Primera vez y estás solo?** Sigue [docs/PRIMEROS-30-DIAS.md](docs/PRIMEROS-30-DIAS.md).
 
 ### ¿Ya tienes tu propio Sonar / DefectDojo / Harbor?
 
@@ -180,6 +211,33 @@ bash deploy/install.sh --yes --profile full       # standard + Harbor
 
 On Windows: `pwsh deploy/install.ps1 -Profile lite`.
 
+### Containers pillar: Harbor (production) vs standalone Trivy (fallback)
+
+The **Containers** pillar has two paths. Pick based on whether you have a registry:
+
+| | **Harbor + trivy-adapter** (main path) | **Standalone Trivy** (`deploy/scan-target.sh --image …`) |
+|---|---|---|
+| What it scans | The images you **actually push to the registry and deploy** | An image you name by hand, on your machine |
+| When to use it | You have (or will have) a registry and deploy from it | You have **no** registry, or want a day-one score |
+| Profile | `full` | `lite` and `standard` (already included) |
+| Cost | **~10 containers** (core, portal, registry, jobservice, db, redis, proxy, trivy-adapter…), ~6 GB+ RAM overall, and **its own installer**: `deploy/harbor/setup-harbor.sh` (not a service of the panel's compose file) | Almost none: one ephemeral `aquasec/trivy` container |
+| Re-scanning | Harbor's trivy-adapter rescans on image push | You run it each time |
+
+**Recommendation:** start with `lite` + standalone Trivy (week 1, see
+[docs/PRIMEROS-30-DIAS.md](docs/PRIMEROS-30-DIAS.md)) and move to **Harbor from month
+2 on**, once you run the panel comfortably and your deploy flow goes through a
+registry. Harbor is the production flow; standalone Trivy is the fallback.
+
+```bash
+bash deploy/install.sh --yes --profile full      # standard + offers to install Harbor
+bash deploy/harbor/setup-harbor.sh               # or install/retry Harbor separately
+bash deploy/provision-sources.sh                 # wires Harbor into the panel
+```
+
+Before installing Harbor, set `HARBOR_ADMIN_PASSWORD` in `deploy/.env` (the installer
+does not generate it and `setup-harbor.sh` requires it). Harbor details (port `8085`, pinned version, its own `docker compose down`):
+[`deploy/harbor/README.md`](deploy/harbor/README.md).
+
 ### What the installer does
 
 1. Checks Docker + Compose.
@@ -220,6 +278,10 @@ docker compose -f deploy/docker-compose.install.yml down
 # Wipe EVERYTHING, data included
 docker compose -f deploy/docker-compose.install.yml down -v
 ```
+
+**Backup, restore, upgrades and key rotation:** see
+[docs/RUNBOOK.md](docs/RUNBOOK.md) (`deploy/backup.sh`, `deploy/restore.sh`).
+**First time, and on your own?** Follow [docs/PRIMEROS-30-DIAS.md](docs/PRIMEROS-30-DIAS.md).
 
 ### Already have your own Sonar / DefectDojo / Harbor?
 

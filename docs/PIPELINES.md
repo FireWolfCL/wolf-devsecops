@@ -71,6 +71,9 @@ señal a lo más caro).
 No inventes un sistema de exclusiones propio. Marca el estado **en DefectDojo**
 (False Positive / Risk Accepted / Out of Scope / Mitigated): el panel ya cuenta solo
 los **activos**, así que un hallazgo aceptado deja de restar en el score. Para
-escáneres sin estado (Gitleaks en CI), usa su archivo de ignore versionado
-(`.gitleaksignore`) con justificación en el commit. (Pendiente de producto: la vista
-de "riesgos aceptados" y el `wolf-ignore.yaml`, ver `MEJORAS.md` 6.3.)
+escáneres sin estado (Trivy suelto, Gitleaks en CI), Wolf DevSecOps trae
+`config/wolf-ignore.yaml`: una lista versionada por proyecto de `{id|cve|rule,
+motivo, aprobado_por, fecha, vence}` que el panel excluye del score (una entrada
+vencida vuelve a contar). `wolf-devsecops gen-ignore --project <key>` genera desde
+ahí los `.trivyignore` / `.gitleaksignore` consistentes para el CI. Ver
+`config/wolf-ignore.yaml.example`.

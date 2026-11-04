@@ -35,6 +35,7 @@ bash deploy/install.sh --lang en     # Windows: pwsh deploy/install.ps1 -Lang en
 ```
 
 → Full guide (ES + EN): **[INSTALL.md](INSTALL.md)** · Kubernetes: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
+→ On your own for security? **[First 30 days](docs/PRIMEROS-30-DIAS.md)** · Operations and backups: [docs/RUNBOOK.md](docs/RUNBOOK.md)
 
 ## What does it show?
 
@@ -43,7 +44,7 @@ For each project you configure:
 - **CI status** — did the last run's gates pass? (GitHub Actions)
 - **Vulnerabilities** — dependency CVEs, SAST, config, secrets (DefectDojo)
 - **Quality** — bugs, code smells, coverage (SonarQube)
-- **Containers** — CVEs in the images you're about to deploy (Trivy / Harbor)
+- **Containers** — CVEs in the images you're about to deploy (**Harbor** + trivy-adapter as the production path; standalone Trivy as the no-registry fallback — see [INSTALL.md](INSTALL.md))
 - **Releases** — latest published version and its SBOM
 - **Remediation** — open PRs that propose fixes
 
