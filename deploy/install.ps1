@@ -18,6 +18,7 @@ param(
   [Alias('Profile')] [string]$InstallProfile = '',   # lite | standard | full ('' = preguntar)
   [string]$Repo = '',                                # ruta local de TU repo a escanear
   [string]$Image = '',                               # imagen de contenedor a escanear
+  [string]$Org = '',                                 # organización para agrupar el proyecto (def. Local)
   [string]$Key = '',                                 # project_key (def.: derivada del repo/imagen)
   [string]$Name = '',
   [switch]$Demo,                                     # escaneo demo python:3.9-slim (opt-in)
@@ -33,6 +34,7 @@ if ($env:WOLF_PROFILE) { $InstallProfile = $env:WOLF_PROFILE }
 if ($InstallProfile -notin @('lite','standard','full','')) { $InstallProfile = '' }
 if ($env:WOLF_REPO) { $Repo = $env:WOLF_REPO }
 if ($env:WOLF_IMAGE) { $Image = $env:WOLF_IMAGE }
+if ($env:WOLF_ORG) { $Org = $env:WOLF_ORG }
 if ($env:WOLF_DEMO -eq '1') { $Demo = [switch]$true }
 
 function T($es,$en){ if($Lang -eq 'en'){$en}else{$es} }
@@ -73,6 +75,7 @@ if (-not $Repo -and -not $Image -and -not $Demo -and -not $Yes) {
   Write-Host (T "`n  ¿Qué quieres analizar? (Enter = omitir)" "`n  What do you want to analyze? (Enter = skip)")
   $Repo  = Read-Host (T '  Ruta local de tu repo' '  Local repo path')
   $Image = Read-Host (T '  Imagen de contenedor (nombre[:tag])' '  Container image (name[:tag])')
+  if ($Repo -or $Image) { $Org = Read-Host (T '  Organización (para agruparlo en el panel) [Local]' '  Organization (to group it in the panel) [Local]') }
   if (-not $Repo -and -not $Image) {
     $r = Read-Host (T '¿Correr el escaneo DEMO (python:3.9-slim)? [s/N]' 'Run the DEMO scan (python:3.9-slim)? [y/N]')
     if ($r -match '^[sSyY]') { $Demo = [switch]$true }
@@ -168,6 +171,7 @@ if ($HasTarget) {
   if ($Image) { $sa += @('--image', $Image) }
   if ($Key)   { $sa += @('--key', $Key) }
   if ($Name)  { $sa += @('--name', $Name) }
+  if ($Org)   { $sa += @('--org', $Org) }
   $gitBash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
   if (Test-Path $gitBash) {
     $env:WOLF_COMPOSE_FILE = ToGitBashPath $Compose

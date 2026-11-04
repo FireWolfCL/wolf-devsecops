@@ -69,6 +69,8 @@ def run_init(config_out: str = "config/projects.yaml", env_out: str = "deploy/.e
     while typer.confirm("¿Añadir un proyecto?", default=not projects):
         key = typer.prompt("  key (id corto)")
         proj: dict = {"key": key, "name": typer.prompt("  nombre", default=key)}
+        # Organización para agrupar/segmentar el proyecto en el panel (dashboard y tabla).
+        proj["org"] = typer.prompt("  organización", default="Wolf")
         if "github" in sources and typer.confirm("  ¿tiene repo en GitHub?", default=True):
             proj["github"] = {
                 "repo": typer.prompt("    owner/repo"),

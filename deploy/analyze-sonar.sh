@@ -40,12 +40,13 @@ warn() { printf '\033[1;33m[sonar]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[sonar]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ─── Argumentos (single-target) ───────────────────────────────────────────────
-T_REPO=""; T_KEY=""; T_NAME=""; NO_SYNC="no"
+T_REPO=""; T_KEY=""; T_NAME=""; T_ORG="Local"; NO_SYNC="no"
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)    [ $# -ge 2 ] || die "--repo requiere una ruta."; T_REPO="$2"; shift 2 ;;
     --key)     [ $# -ge 2 ] || die "--key requiere un valor."; T_KEY="$2"; shift 2 ;;
     --name)    [ $# -ge 2 ] || die "--name requiere un valor."; T_NAME="$2"; shift 2 ;;
+    --org)     [ $# -ge 2 ] || die "--org requiere un valor."; T_ORG="$2"; shift 2 ;;
     --no-sync) NO_SYNC="yes"; shift ;;
     -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     *) die "argumento desconocido: $1 (usa --repo/--key/--name o nada para la flota)" ;;
@@ -92,7 +93,7 @@ if [ -n "$T_REPO" ]; then
   log "analizando $T_NAME  ($T_REPO)…"
   analyze_one "$T_REPO" "$T_KEY" "$T_NAME" || die "✗ $T_NAME: el scanner falló (¿SonarQube UP? ¿token válido?)."
   log "✔ $T_NAME analizado."
-  scan_helper upsert "$YAML" --key "$T_KEY" --name "$T_NAME" --sonar >/dev/null \
+  scan_helper upsert "$YAML" --key "$T_KEY" --name "$T_NAME" --org "$T_ORG" --sonar >/dev/null \
     || die "No pude registrar $T_KEY en $YAML."
   log "config: proyecto '$T_KEY' cableado a Sonar."
   if [ "$NO_SYNC" = "no" ]; then

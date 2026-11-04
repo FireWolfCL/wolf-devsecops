@@ -8,6 +8,7 @@
 #   (ambos a la vez: el repo usa <key>, la imagen usa <key>-image)
 #
 # Opciones:
+#   --org <nombre>  organización para agrupar el proyecto en el panel (def. Local)
 #   --no-sonar   solo Trivy            --no-trivy   solo Sonar (requiere --repo)
 #   --no-sync    no sincroniza/reinicia el backend (el caller lo hará)
 #   --config <yaml>        projects.yaml a actualizar (def. config/projects.yaml)
@@ -29,7 +30,7 @@ log()  { printf '\033[1;36m[scan]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[scan]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[scan]\033[0m %s\n' "$*" >&2; exit 1; }
 
-REPO=""; IMAGE=""; KEY=""; NAME=""; DO_SONAR="yes"; DO_TRIVY="yes"; DO_SYNC="yes"
+REPO=""; IMAGE=""; KEY=""; NAME=""; ORG="Local"; DO_SONAR="yes"; DO_TRIVY="yes"; DO_SYNC="yes"
 YAML="$ROOT/config/projects.yaml"
 COMPOSE="${WOLF_COMPOSE_FILE:-$HERE/docker-compose.install.yml}"
 while [ $# -gt 0 ]; do
@@ -38,6 +39,7 @@ while [ $# -gt 0 ]; do
     --image)        [ $# -ge 2 ] || die "--image requiere un nombre."; IMAGE="$2"; shift 2 ;;
     --key)          [ $# -ge 2 ] || die "--key requiere un valor."; KEY="$2"; shift 2 ;;
     --name)         [ $# -ge 2 ] || die "--name requiere un valor."; NAME="$2"; shift 2 ;;
+    --org)          [ $# -ge 2 ] || die "--org requiere un valor."; ORG="$2"; shift 2 ;;
     --config)       [ $# -ge 2 ] || die "--config requiere una ruta."; YAML="$2"; shift 2 ;;
     --compose-file) [ $# -ge 2 ] || die "--compose-file requiere una ruta."; COMPOSE="$2"; shift 2 ;;
     --no-sonar)     DO_SONAR="no"; shift ;;
@@ -113,7 +115,7 @@ if [ "$DO_TRIVY" = "yes" ]; then
   if [ -n "$REPO" ]; then
     if trivy_repo; then
       log "✔ Trivy repo OK."
-      scan_helper upsert "$YAML" --key "$KEY" --name "$NAME" --trivy-report "$KEY.json" >/dev/null \
+      scan_helper upsert "$YAML" --key "$KEY" --name "$NAME" --org "$ORG" --trivy-report "$KEY.json" >/dev/null \
         || { warn "No pude registrar $KEY en $YAML."; FAIL=1; }
     else warn "✗ Trivy falló sobre el repo."; FAIL=1; fi
   fi
@@ -121,7 +123,7 @@ if [ "$DO_TRIVY" = "yes" ]; then
     INAME="$NAME"; [ -n "$REPO" ] && INAME="$NAME (image)"
     if trivy_image; then
       log "✔ Trivy imagen OK."
-      scan_helper upsert "$YAML" --key "$IMG_KEY" --name "$INAME" --trivy-report "$IMG_KEY.json" >/dev/null \
+      scan_helper upsert "$YAML" --key "$IMG_KEY" --name "$INAME" --org "$ORG" --trivy-report "$IMG_KEY.json" >/dev/null \
         || { warn "No pude registrar $IMG_KEY en $YAML."; FAIL=1; }
     else warn "✗ Trivy falló sobre la imagen (¿existe/pública? las privadas requieren docker login previo y no se soportan aquí)."; FAIL=1; fi
   fi
@@ -129,7 +131,7 @@ fi
 
 if [ "$DO_SONAR" = "yes" ] && [ -n "$REPO" ]; then
   if grep -Eq '^SONAR_TOKEN=.+' "$ENV_FILE" 2>/dev/null; then
-    bash "$HERE/analyze-sonar.sh" --repo "$REPO" --key "$KEY" --name "$NAME" --no-sync \
+    bash "$HERE/analyze-sonar.sh" --repo "$REPO" --key "$KEY" --name "$NAME" --org "$ORG" --no-sync \
       || { warn "✗ Sonar falló sobre el repo."; FAIL=1; }
   else
     warn "SONAR_TOKEN vacío en deploy/.env: se omite Sonar (corre provision-sources.sh y luego este script)."
