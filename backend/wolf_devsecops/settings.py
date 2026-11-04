@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Ruta al archivo de proyectos/fuentes (semilla de bootstrap YAML→BD, ADR-015).
     config_path: str = "config/projects.yaml"
 
+    # Excepciones versionables por proyecto (6.3.c): ids/cves/reglas excluidos del
+    # score para escáneres sin estados nativos (Trivy suelto). Ausente = no suprime.
+    ignore_path: str = "config/wolf-ignore.yaml"
+
     # Persistencia (ADR-012): SQLite por defecto (cero-ops para quien autohospeda).
     # Postgres opcional: WOLF_DATABASE_URL=postgresql+asyncpg://user:pass@host/db
     # La credencial vive SOLO aquí (entorno), nunca en el repo ni en la BD.

@@ -88,7 +88,13 @@ class TrivyConnector(Connector):
             raise ConnectorUnavailable("El reporte Trivy no es JSON válido.") from exc
 
     @staticmethod
-    def _counts(report: dict) -> dict[str, int]:
+    def _id_of(item: dict) -> str:
+        """Id normalizado (MAYÚSCULAS) de una vuln (VulnerabilityID) o misconfig (ID/AVDID)."""
+        return str(item.get("VulnerabilityID") or item.get("ID") or item.get("AVDID") or "").upper()
+
+    @classmethod
+    def _counts(cls, report: dict, ignored: set[str] | None = None) -> dict[str, int]:
+        ignored = ignored or set()
         counts = {s: 0 for s in ("critical", "high", "medium", "low", "info")}
         for result in report.get("Results") or []:
             if not isinstance(result, dict):
@@ -96,28 +102,40 @@ class TrivyConnector(Connector):
             # Vulnerabilidades de paquetes + misconfiguraciones (ambas con Severity).
             for key in ("Vulnerabilities", "Misconfigurations"):
                 for item in result.get(key) or []:
-                    sev = str((item or {}).get("Severity", "")).upper()
+                    if not isinstance(item, dict):
+                        continue
+                    if cls._id_of(item) in ignored:  # 6.3.c: excepción vigente → no cuenta
+                        continue
+                    sev = str(item.get("Severity", "")).upper()
                     norm = _TRIVY_SEV.get(sev, "info")
                     counts[norm] += 1
         return counts
 
+    def _ignored(self, project: ProjectConfig) -> set[str]:
+        """Ids suprimidos vigentes para este proyecto (config/wolf-ignore.yaml, 6.3.c)."""
+        from ..core import ignore
+
+        return ignore.active_ids_for(project.key)
+
     async def fetch_summary(self, project: ProjectConfig) -> FindingsSummary:
         report = await self._report(project)
-        counts = self._counts(report)
+        counts = self._counts(report, self._ignored(project))
         return FindingsSummary(counts=SeverityCount(**counts), total_active=sum(counts.values()))
 
     # Orden de severidad para priorizar la lista (crítico primero).
     _SEV_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4}
 
     @classmethod
-    def _findings_list(cls, report: dict, cap: int = 150) -> list[dict]:
+    def _findings_list(cls, report: dict, cap: int = 150, ignored: set[str] | None = None) -> list[dict]:
         """Lista accionable: QUÉ está afectado y CÓMO arreglarlo (versión fijada).
 
         Normaliza vulnerabilidades (CVE + paquete + versión instalada → versión que
         lo corrige) y misconfiguraciones (ID + resolución). Ordena crítico primero
         y acota a `cap`. Sin rutas absolutas ni código: solo el target que Trivy ya
-        publica (p. ej. el nombre del lockfile o de la imagen).
+        publica (p. ej. el nombre del lockfile o de la imagen). Los ids con excepción
+        vigente (6.3.c) se omiten para que la lista cuadre con el score.
         """
+        ignored = ignored or set()
         out: list[dict] = []
         for r in report.get("Results") or []:
             if not isinstance(r, dict):
@@ -125,6 +143,8 @@ class TrivyConnector(Connector):
             target = r.get("Target")
             for v in r.get("Vulnerabilities") or []:
                 if not isinstance(v, dict):
+                    continue
+                if cls._id_of(v) in ignored:
                     continue
                 out.append({
                     "kind": "vuln",
@@ -138,6 +158,8 @@ class TrivyConnector(Connector):
                 })
             for m in r.get("Misconfigurations") or []:
                 if not isinstance(m, dict):
+                    continue
+                if cls._id_of(m) in ignored:
                     continue
                 out.append({
                     "kind": "misconfig",
@@ -154,8 +176,9 @@ class TrivyConnector(Connector):
 
     async def fetch_detail(self, project: ProjectConfig) -> SourceDetail:
         report = await self._report(project)
-        counts = self._counts(report)
-        findings = self._findings_list(report)
+        ignored = self._ignored(project)
+        counts = self._counts(report, ignored)
+        findings = self._findings_list(report, ignored=ignored)
         total = sum(counts.values())
         return SourceDetail(
             project_key=project.key,

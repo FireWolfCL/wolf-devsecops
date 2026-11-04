@@ -6,6 +6,7 @@ import typer
 
 from .bot import bot
 from .create_admin import create_admin
+from .gen_ignore import gen_ignore
 from .import_org import import_org
 from .init import run_init
 from .issue_license import issue_license
@@ -32,6 +33,8 @@ app.command(name="bot")(bot)
 app.command(name="import-org")(import_org)
 # Emisión de licencias firmadas (lado WLA; requiere la llave privada).
 app.command(name="issue-license")(issue_license)
+# Genera .trivyignore/.gitleaksignore desde config/wolf-ignore.yaml (6.3.c).
+app.command(name="gen-ignore")(gen_ignore)
 
 
 @app.command()

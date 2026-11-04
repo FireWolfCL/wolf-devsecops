@@ -1,0 +1,34 @@
+# Wolf DevSecOps — excepciones versionables (MEJORAS 6.3.c)
+# ---------------------------------------------------------------------------
+# Para escáneres SIN estados nativos (Trivy suelto en el CI, Gitleaks) este
+# archivo es el "risk accepted" del equipo: lista los hallazgos que se excluyen
+# del PUNTAJE, con motivo, quién lo aprobó y cuándo VENCE. Es solo lectura hacia
+# las fuentes (ADR-001): Wolf no escribe en ninguna herramienta; solo deja de
+# contar estos ids y, con `wolf-devsecops gen-ignore`, genera .trivyignore /
+# .gitleaksignore consistentes para el CI.
+#
+# Reglas:
+#  - 'vence' (YYYY-MM-DD) es OBLIGATORIO en la práctica: una excepción vencida
+#    VUELVE A CONTAR en el score y aparece como aviso. Una excepción eterna es
+#    deuda escondida.
+#  - Falso positivo ≠ riesgo aceptado: ambos excluyen, pero el 'motivo' debe
+#    dejar claro cuál es (evidencia para auditoría ISO 27001 A.8.8).
+#  - 'id' | 'cve' | 'rule' son alias: usa el que más claro quede. El valor es el
+#    identificador tal cual lo emite el escáner (CVE-2024-1234, DS002, AVD-...).
+#  - 'tool' (opcional): trivy | gitleaks. Vacío = aplica a ambos en gen-ignore.
+#
+# Copia este archivo a config/wolf-ignore.yaml y edítalo. Sin el archivo, no se
+# suprime nada.
+
+version: 1
+
+# Excepciones que aplican a TODOS los proyectos.
+global:
+  - { cve: CVE-2024-0000, motivo: "FP confirmado upstream (no afecta nuestra build)", aprobado_por: faal, fecha: 2026-11-04, vence: 2027-02-04, tool: trivy }
+
+# Excepciones por proyecto (la clave es el project key del panel).
+projects:
+  wolf-cloud:
+    - { cve: CVE-2024-1234, motivo: "Riesgo aceptado: sin parche aún; mitigado por WAF", aprobado_por: faal, fecha: 2026-11-04, vence: 2027-02-04, tool: trivy }
+    - { rule: DS002, motivo: "root requerido en la imagen base de este servicio", aprobado_por: faal, fecha: 2026-11-04, vence: 2027-02-04, tool: trivy }
+    - { rule: generic-api-key, motivo: "Falso positivo: cadena de ejemplo en fixtures", aprobado_por: faal, fecha: 2026-11-04, vence: 2027-02-04, tool: gitleaks }
