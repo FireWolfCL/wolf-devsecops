@@ -32,7 +32,7 @@ FRESH_SEED="no"
 L="es"
 ASSUME_YES="no"
 PROFILE=""                             # vacío = sin fijar (se pregunta o default standard)
-T_REPO=""; T_IMAGE=""; T_KEY=""; T_NAME=""; T_ORG=""; DEMO="no"   # objetivo a escanear / scan target
+T_REPO=""; T_IMAGE=""; T_KEY=""; T_NAME=""; T_ORG=""; DEMO="no"; GITLEAKS="no"   # objetivo a escanear / scan target
 for a in "$@"; do
   case "$a" in
     --lang=en|--en) L="en" ;;
@@ -48,6 +48,7 @@ for a in "$@"; do
     --name=*)  T_NAME="${a#--name=}" ;;
     --org=*)   T_ORG="${a#--org=}" ;;
     --demo)    DEMO="yes" ;;
+    --gitleaks) GITLEAKS="yes" ;;
     --repo|--image|--key|--name|--org) : ;;  # el valor llega como siguiente arg (abajo)
     lite|standard|full) PROFILE="$a" ;;
   esac
@@ -67,6 +68,7 @@ done
 [ -n "${WOLF_REPO:-}" ] && T_REPO="$WOLF_REPO"
 [ -n "${WOLF_IMAGE:-}" ] && T_IMAGE="$WOLF_IMAGE"
 [ -n "${WOLF_ORG:-}" ] && T_ORG="$WOLF_ORG"
+[ "${WOLF_GITLEAKS:-}" = "1" ] && GITLEAKS="yes"
 [ "${WOLF_DEMO:-}" = "1" ] && DEMO="yes"
 [ -n "${WOLF_LANG:-}" ] && L="$WOLF_LANG"
 [ -n "${WOLF_PROFILE:-}" ] && PROFILE="$WOLF_PROFILE"
@@ -310,6 +312,7 @@ if [ "$HAS_TARGET" = "yes" ]; then
   [ -n "$T_KEY" ]   && SCAN_ARGS+=(--key "$T_KEY")
   [ -n "$T_NAME" ]  && SCAN_ARGS+=(--name "$T_NAME")
   [ -n "$T_ORG" ]   && SCAN_ARGS+=(--org "$T_ORG")
+  [ "$GITLEAKS" = "yes" ] && SCAN_ARGS+=(--gitleaks)
   if WOLF_COMPOSE_FILE="$COMPOSE_FILE" bash "$HERE/scan-target.sh" "${SCAN_ARGS[@]}"; then
     ok "Tu score real ya está en el panel." "Your real score is now in the panel."
   else

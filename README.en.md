@@ -47,6 +47,10 @@ For each project you configure:
 - **Releases** — latest published version and its SBOM
 - **Remediation** — open PRs that propose fixes
 
+Findings are grouped by scan type (secrets · SAST · SCA · container · IaC · DAST).
+To feed them from **your** CI → DefectDojo there are ready-made pipelines: see
+**[docs/PIPELINES.md](docs/PIPELINES.md)** and [`deploy/ci-examples/`](deploy/ci-examples/).
+
 ## Architecture (overview)
 
 ```

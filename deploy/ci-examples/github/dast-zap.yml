@@ -1,0 +1,37 @@
+# DAST sobre el entorno desplegado → DefectDojo (categoría "dast"). Cierra el ciclo:
+# escanea la app CORRIENDO (staging/preview), no el código. Copia a .github/workflows/
+# en TU repo y pon la URL objetivo. Secrets DEFECTDOJO_URL/TOKEN, var DEFECTDOJO_PRODUCT.
+name: dast (owasp zap) → DefectDojo
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "URL del entorno a escanear (ej. https://staging.tu-app.cl)"
+        required: true
+permissions:
+  contents: read
+jobs:
+  zap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ZAP baseline scan
+        run: |
+          mkdir -p zap-out && chmod 777 zap-out
+          docker run --rm -v "$PWD/zap-out:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:2.15.0 \
+            zap-baseline.py -t "${{ inputs.target }}" -x zap.xml -I || true
+      - name: Subir a DefectDojo (si está configurado)
+        env:
+          DD_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
+          DD_PRODUCT: ${{ vars.DEFECTDOJO_PRODUCT }}
+        run: |
+          [ -n "$DD_URL" ] && [ -n "$DD_TOKEN" ] || { echo "DefectDojo no configurado; omito subida."; exit 0; }
+          curl -sS -X POST "$DD_URL/api/v2/reimport-scan/" \
+            -H "Authorization: Token $DD_TOKEN" \
+            -F "scan_type=ZAP Scan" \
+            -F "file=@zap-out/zap.xml" \
+            -F "product_name=$DD_PRODUCT" \
+            -F "engagement_name=CI" -F "auto_create_context=true" \
+            -F "active=true" -F "verified=false" \
+            -F "close_old_findings=true" -F "do_not_reactivate=false"

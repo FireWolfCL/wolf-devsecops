@@ -47,6 +47,10 @@ Por cada proyecto que configures:
 - **Releases** — última versión publicada y su SBOM
 - **Remediación** — PRs abiertos que proponen arreglos
 
+Los Hallazgos se agrupan por tipo de escaneo (secrets · SAST · SCA · container ·
+IaC · DAST). Para alimentarlos desde **tu** CI → DefectDojo hay pipelines listos:
+ver **[docs/PIPELINES.md](docs/PIPELINES.md)** y [`deploy/ci-examples/`](deploy/ci-examples/).
+
 ## Arquitectura (resumen)
 
 ```

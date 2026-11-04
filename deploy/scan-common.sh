@@ -10,6 +10,7 @@ TRIVY_IMG="${TRIVY_IMG:-aquasec/trivy:0.56.2}"
 RVOL="${RVOL:-wolf-devsecops_trivy_reports}"   # volumen que sirve el nginx `trivy`
 CVOL="${CVOL:-wolf-devsecops_trivy_cache}"
 SCANNER_IMG="${SCANNER_IMG:-sonarsource/sonar-scanner-cli:11}"
+GITLEAKS_IMG="${GITLEAKS_IMG:-ghcr.io/gitleaks/gitleaks:v8.21.2}"
 SCAN_NET="${SCAN_NET:-wolf-devsecops_default}"
 
 # Trivy fs NO respeta .gitignore: sin esto escanea caches/artefactos/volúmenes de

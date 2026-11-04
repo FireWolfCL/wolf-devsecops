@@ -19,6 +19,7 @@ param(
   [string]$Repo = '',                                # ruta local de TU repo a escanear
   [string]$Image = '',                               # imagen de contenedor a escanear
   [string]$Org = '',                                 # organización para agrupar el proyecto (def. Local)
+  [switch]$Gitleaks,                                 # además corre Gitleaks sobre el historial git
   [string]$Key = '',                                 # project_key (def.: derivada del repo/imagen)
   [string]$Name = '',
   [switch]$Demo,                                     # escaneo demo python:3.9-slim (opt-in)
@@ -172,6 +173,7 @@ if ($HasTarget) {
   if ($Key)   { $sa += @('--key', $Key) }
   if ($Name)  { $sa += @('--name', $Name) }
   if ($Org)   { $sa += @('--org', $Org) }
+  if ($Gitleaks) { $sa += @('--gitleaks') }
   $gitBash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
   if (Test-Path $gitBash) {
     $env:WOLF_COMPOSE_FILE = ToGitBashPath $Compose

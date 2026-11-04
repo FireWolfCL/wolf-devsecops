@@ -9,6 +9,7 @@
 #
 # Opciones:
 #   --org <nombre>  organización para agrupar el proyecto en el panel (def. Local)
+#   --gitleaks   además corre Gitleaks sobre el HISTORIAL git (secretos); opt-in
 #   --no-sonar   solo Trivy            --no-trivy   solo Sonar (requiere --repo)
 #   --no-sync    no sincroniza/reinicia el backend (el caller lo hará)
 #   --config <yaml>        projects.yaml a actualizar (def. config/projects.yaml)
@@ -30,7 +31,7 @@ log()  { printf '\033[1;36m[scan]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[scan]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[scan]\033[0m %s\n' "$*" >&2; exit 1; }
 
-REPO=""; IMAGE=""; KEY=""; NAME=""; ORG="Local"; DO_SONAR="yes"; DO_TRIVY="yes"; DO_SYNC="yes"
+REPO=""; IMAGE=""; KEY=""; NAME=""; ORG="Local"; DO_SONAR="yes"; DO_TRIVY="yes"; DO_SYNC="yes"; DO_GITLEAKS="no"
 YAML="$ROOT/config/projects.yaml"
 COMPOSE="${WOLF_COMPOSE_FILE:-$HERE/docker-compose.install.yml}"
 while [ $# -gt 0 ]; do
@@ -42,6 +43,7 @@ while [ $# -gt 0 ]; do
     --org)          [ $# -ge 2 ] || die "--org requiere un valor."; ORG="$2"; shift 2 ;;
     --config)       [ $# -ge 2 ] || die "--config requiere una ruta."; YAML="$2"; shift 2 ;;
     --compose-file) [ $# -ge 2 ] || die "--compose-file requiere una ruta."; COMPOSE="$2"; shift 2 ;;
+    --gitleaks)     DO_GITLEAKS="yes"; shift ;;
     --no-sonar)     DO_SONAR="no"; shift ;;
     --no-trivy)     DO_TRIVY="no"; shift ;;
     --no-sync)      DO_SYNC="no"; shift ;;
@@ -136,6 +138,30 @@ if [ "$DO_SONAR" = "yes" ] && [ -n "$REPO" ]; then
   else
     warn "SONAR_TOKEN vacío en deploy/.env: se omite Sonar (corre provision-sources.sh y luego este script)."
     FAIL=1
+  fi
+fi
+
+# ── Gitleaks (opt-in --gitleaks): secretos en el HISTORIAL git (Trivy solo ve el
+# árbol actual). Conveniencia de arranque: cuenta y avisa; para que aparezca en el
+# panel, súbelo a DefectDojo con el pipeline de ejemplo (deploy/ci-examples). ──
+if [ "$DO_GITLEAKS" = "yes" ] && [ -n "$REPO" ]; then
+  if [ -d "$REPO/.git" ]; then
+    log "Gitleaks (historial)  $REPO"
+    GL_REPORT="$(mktemp)"
+    # gitleaks lee .gitleaksignore del propio repo. --redact: nunca imprime el secreto.
+    docker run --rm -v "$REPO:/src:ro" "$GITLEAKS_IMG" \
+      detect --source /src --no-banner --redact --exit-code 0 \
+      --report-format json --report-path /dev/stdout > "$GL_REPORT" 2>/dev/null || true
+    GL_N="$(grep -c '"RuleID"' "$GL_REPORT" 2>/dev/null || echo 0)"
+    rm -f "$GL_REPORT"
+    if [ "${GL_N:-0}" -gt 0 ] 2>/dev/null; then
+      warn "Gitleaks: $GL_N posible(s) secreto(s) en el historial git. Revísalos; súbelos a"
+      warn "  DefectDojo con deploy/ci-examples/github/secrets-gitleaks.yml para verlos en el panel."
+    else
+      log "✔ Gitleaks: sin secretos en el historial."
+    fi
+  else
+    warn "--gitleaks necesita un repo git (no hay .git en $REPO); se omite."
   fi
 fi
 

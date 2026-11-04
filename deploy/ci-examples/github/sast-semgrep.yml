@@ -1,0 +1,30 @@
+# SAST por reglas → DefectDojo (categoría "sast"). Complementa a SonarQube.
+# Copia a .github/workflows/ en TU repo. Secrets DEFECTDOJO_URL/TOKEN, var DEFECTDOJO_PRODUCT.
+name: sast (semgrep) → DefectDojo
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.90.0
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: semgrep
+        run: semgrep --config auto --json --output semgrep.json || true
+      - name: Subir a DefectDojo (si está configurado)
+        env:
+          DD_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
+          DD_PRODUCT: ${{ vars.DEFECTDOJO_PRODUCT }}
+        run: |
+          [ -n "$DD_URL" ] && [ -n "$DD_TOKEN" ] || { echo "DefectDojo no configurado; omito subida."; exit 0; }
+          curl -sS -X POST "$DD_URL/api/v2/reimport-scan/" \
+            -H "Authorization: Token $DD_TOKEN" \
+            -F "scan_type=Semgrep JSON Report" \
+            -F "file=@semgrep.json" \
+            -F "product_name=$DD_PRODUCT" \
+            -F "engagement_name=CI" -F "auto_create_context=true" \
+            -F "active=true" -F "verified=false" \
+            -F "close_old_findings=true" -F "do_not_reactivate=false"

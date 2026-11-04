@@ -1,0 +1,31 @@
+# Infraestructura como código (IaC) → DefectDojo (categoría "iac"). Dockerfile,
+# compose, k8s, Terraform. Copia a .github/workflows/ en TU repo.
+# Secrets DEFECTDOJO_URL/TOKEN, var DEFECTDOJO_PRODUCT.
+name: iac (checkov) → DefectDojo
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checkov:
+    runs-on: ubuntu-latest
+    container:
+      image: bridgecrew/checkov:3.2.257
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: checkov
+        run: checkov -d . -o json --output-file-path . --soft-fail || true
+      - name: Subir a DefectDojo (si está configurado)
+        env:
+          DD_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
+          DD_PRODUCT: ${{ vars.DEFECTDOJO_PRODUCT }}
+        run: |
+          [ -n "$DD_URL" ] && [ -n "$DD_TOKEN" ] || { echo "DefectDojo no configurado; omito subida."; exit 0; }
+          curl -sS -X POST "$DD_URL/api/v2/reimport-scan/" \
+            -H "Authorization: Token $DD_TOKEN" \
+            -F "scan_type=Checkov Scan" \
+            -F "file=@results_json.json" \
+            -F "product_name=$DD_PRODUCT" \
+            -F "engagement_name=CI" -F "auto_create_context=true" \
+            -F "active=true" -F "verified=false" \
+            -F "close_old_findings=true" -F "do_not_reactivate=false"

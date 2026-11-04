@@ -1,0 +1,40 @@
+# Dependencias (SCA) + SBOM → DefectDojo (categoría "sca"). Syft genera el SBOM
+# CycloneDX (alimenta el pilar Releases) y Grype saca los CVEs.
+# Copia a .github/workflows/ en TU repo. Secrets DEFECTDOJO_URL/TOKEN, var DEFECTDOJO_PRODUCT.
+name: sca (grype + syft) → DefectDojo
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  grype:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: SBOM (syft, CycloneDX)
+        run: |
+          docker run --rm -v "$PWD:/src" anchore/syft:v1.14.1 \
+            scan dir:/src -o cyclonedx-json=/src/sbom.cdx.json
+      - name: CVEs (grype)
+        run: |
+          docker run --rm -v "$PWD:/src" anchore/grype:v0.82.0 \
+            sbom:/src/sbom.cdx.json -o json --file /src/grype.json || true
+      - name: Guardar SBOM como artefacto
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: sbom
+          path: sbom.cdx.json
+      - name: Subir a DefectDojo (si está configurado)
+        env:
+          DD_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
+          DD_PRODUCT: ${{ vars.DEFECTDOJO_PRODUCT }}
+        run: |
+          [ -n "$DD_URL" ] && [ -n "$DD_TOKEN" ] || { echo "DefectDojo no configurado; omito subida."; exit 0; }
+          curl -sS -X POST "$DD_URL/api/v2/reimport-scan/" \
+            -H "Authorization: Token $DD_TOKEN" \
+            -F "scan_type=Anchore Grype" \
+            -F "file=@grype.json" \
+            -F "product_name=$DD_PRODUCT" \
+            -F "engagement_name=CI" -F "auto_create_context=true" \
+            -F "active=true" -F "verified=false" \
+            -F "close_old_findings=true" -F "do_not_reactivate=false"
