@@ -68,6 +68,24 @@ def _category(finding: dict) -> str:
     return "other"
 
 
+def _is_managed_out(finding: dict) -> bool:
+    """¿El finding está gestionado como NO-abierto y por tanto NO debe pesar en el
+    score? (6.3.a) — falso positivo, riesgo aceptado, fuera de alcance o mitigado.
+
+    DefectDojo ya los marca `active=false` y la query pide `active=true`, así que en
+    producción no llegan; esto es defensa en profundidad: si el servidor (o un cambio
+    futuro del filtro) los devuelve igual, no se cuentan. Falso positivo ≠ riesgo
+    aceptado, pero ambos salen del conteo del puntaje.
+    """
+    return bool(
+        finding.get("false_p")
+        or finding.get("risk_accepted")
+        or finding.get("out_of_scope")
+        or finding.get("is_mitigated")
+        or finding.get("mitigated")
+    )
+
+
 def _finding_status(finding: dict) -> str:
     """Estado de gestión del finding en DefectDojo (2.3: el solape Trivy↔DefectDojo).
 
@@ -151,13 +169,19 @@ class DefectDojoConnector(Connector):
         payload = await self._active_findings(dd.product if dd else "")
         counts = SeverityCount()
         categories: dict[str, int] = {}
+        excluded = 0  # findings gestionados-fuera devueltos pese al filtro active=true
         for finding in payload.get("results", []):
+            if _is_managed_out(finding):  # 6.3.a: no pesa en el score
+                excluded += 1
+                continue
             key = _SEV_MAP.get(str(finding.get("severity", "")).lower())
             if key:
                 setattr(counts, key, getattr(counts, key) + 1)
             cat = _category(finding)
             categories[cat] = categories.get(cat, 0) + 1
-        total = payload.get("count", counts.total)
+        # `count` es el total del API (con paginación); restamos los que el guardia
+        # atrapó en esta página para no inflar total_active con gestionados-fuera.
+        total = payload.get("count", counts.total) - excluded
         return FindingsSummary(counts=counts, total_active=total, categories=categories)
 
     # Orden de severidad para priorizar la lista (crítico primero).
@@ -172,6 +196,8 @@ class DefectDojoConnector(Connector):
         out: list[dict] = []
         for f in results:
             if not isinstance(f, dict):
+                continue
+            if _is_managed_out(f):  # 6.3.a: fuera del score → fuera del drill-down activo
                 continue
             sev = str(f.get("severity", "")).upper()
             pkg = f.get("component_name") or None

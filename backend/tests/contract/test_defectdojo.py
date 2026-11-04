@@ -68,10 +68,26 @@ async def test_defectdojo_detalle_lleva_estado_de_gestion():
     detail = await _connector().fetch_detail(_project())
     by_title = {f["title"]: f for f in detail.payload["findings"]}
     assert all("status" in f for f in detail.payload["findings"])
-    # El orden de prioridad del estado: riesgo aceptado > en revisión > ... > activo.
     assert by_title["Hardcoded AWS secret key"]["status"] == "under_review"
     assert by_title["Outdated dependency (CVE-2024-1234)"]["status"] == "verified"
-    assert by_title["Reflected XSS"]["status"] == "risk_accepted"
+    assert by_title["Reflected XSS"]["status"] == "active"
     assert by_title["SQL injection"]["status"] == "active"
     # El CVE queda como id → es lo que cruza con el CVE de Trivy en la vista.
     assert by_title["Outdated dependency (CVE-2024-1234)"]["id"] == "CVE-2024-1234"
+
+
+@pytest.mark.asyncio
+async def test_defectdojo_no_cuenta_gestionados_fuera():
+    # 6.3.a: un finding risk-accepted (o FP / out-of-scope / mitigado) devuelto por
+    # el API NO debe pesar en el score ni aparecer en el drill-down activo, aunque
+    # venga con active=true. El guardia del conector lo excluye (defensa en profundidad).
+    conn, project = _connector(), _project()
+    summary = await conn.fetch_summary(project)
+    # El fixture trae 5 resultados (count=5) con uno risk-accepted → 4 cuentan.
+    assert summary.total_active == 4
+    assert summary.counts.total == 4
+    assert summary.counts.critical == 1  # el 2º crítico es risk-accepted: no suma
+    detail = await conn.fetch_detail(project)
+    titles = {f["title"] for f in detail.payload["findings"]}
+    assert "Risk-accepted old CVE" not in titles
+    assert "CVE-2023-9999" not in {f.get("id") for f in detail.payload["findings"]}

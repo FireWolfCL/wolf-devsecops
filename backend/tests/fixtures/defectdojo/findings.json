@@ -1,5 +1,5 @@
 {
-  "count": 4,
+  "count": 5,
   "results": [
     {
       "id": 1, "title": "Hardcoded AWS secret key", "severity": "Critical", "active": true,
@@ -18,8 +18,13 @@
     },
     {
       "id": 4, "title": "Reflected XSS", "severity": "Low", "active": true,
-      "risk_accepted": true,
       "related_fields": { "test": { "id": 14, "test_type": { "id": 104, "name": "ZAP Scan" } } }
+    },
+    {
+      "id": 5, "title": "Risk-accepted old CVE", "severity": "Critical", "active": true,
+      "cve": "CVE-2023-9999", "risk_accepted": true,
+      "component_name": "zlib", "component_version": "1.2.11",
+      "related_fields": { "test": { "id": 13, "test_type": { "id": 103, "name": "Anchore Grype" } } }
     }
   ]
 }
