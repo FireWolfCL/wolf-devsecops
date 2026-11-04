@@ -14,12 +14,19 @@ Solo lectura: cualquier usuario autenticado (viewer/operator/admin).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.dependencies import require_role
+from ..core import ignore as ign
 from ..core.aggregator import Aggregator
 from ..core.config import AppConfig
+from ..db.session import get_db
+from ..edition import FEATURE_REPORTS_COMPLIANCE, current_edition, require_feature
 from ..models import (
+    PostureSnapshot,
     ProjectReport,
     ProjectSummary,
     ReportSection,
@@ -27,6 +34,8 @@ from ..models import (
     SourceStatus,
 )
 from ..rbac.roles import ALL_ROLES
+from ..services import posture_history_service, report_pdf
+from ..settings import get_settings
 from .deps import get_aggregator, get_config
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_role(*ALL_ROLES))])
@@ -109,4 +118,44 @@ async def project_report(
     return ProjectReport(
         key=s.key, name=s.name, org=s.org, generated_at=s.generated_at,
         posture=s.posture, sections=sections,
+    )
+
+
+@router.get(
+    "/projects/{key}/report.pdf",
+    dependencies=[Depends(require_feature(FEATURE_REPORTS_COMPLIANCE))],  # feature Pro (402)
+)
+async def project_report_pdf(
+    key: str,
+    lang: str = Query("es"),
+    aggregator: Aggregator = Depends(get_aggregator),
+    config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Reporte de cumplimiento en PDF (2.4, Pro): score+tendencia, checks, mapeo
+    ISO/SSDF/DSOMM y riesgos aceptados vigentes. Evidencia para auditoría."""
+    project = config.project(key)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Proyecto desconocido: {key}")
+
+    summary = await aggregator.get_summary(project)
+    rows = await posture_history_service.list_history(db, key, days=90)
+    history = [
+        PostureSnapshot(
+            captured_at=r.captured_at, compliance_pct=r.compliance_pct, band=r.band,
+            crit=r.crit, high=r.high, med=r.med, low=r.low, coverage_pct=r.coverage_pct,
+        )
+        for r in rows
+    ]
+    entries = ign.load_ignore(get_settings().ignore_path).entries_for(key)
+    accepted = [e for e in entries if not e.is_expired(date.today())]
+
+    pdf = report_pdf.build_pdf(
+        summary, history, accepted, lang=lang, edition=current_edition()
+    )
+    filename = f"wolf-cumplimiento-{key}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

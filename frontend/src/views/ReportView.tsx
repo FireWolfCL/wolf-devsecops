@@ -2,12 +2,15 @@
 // o descargable como Markdown. Por cada herramienta: QUÉ está afectado y CÓMO
 // remediarlo. Todo es DATO del backend; los TEXTOS se arman aquí en el idioma
 // activo (el backend ya no redacta frases, para no mezclar idiomas).
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
+import { Link } from "react-router-dom";
 
+import { downloadCompliancePdf } from "../api/client";
 import { fixHint } from "../components/FindingsDetail";
+import { ProBadge } from "../components/Pro";
 import { ExtLink, fmtDate } from "../components/util";
-import { useReport } from "../hooks";
-import { useT, type TFn } from "../i18n";
+import { useFeature, useReport } from "../hooks";
+import { useI18n, useT, type TFn } from "../i18n";
 import type { ProjectReport, ReportSection, TrivyFinding } from "../api/types";
 
 type T = TFn;
@@ -193,6 +196,22 @@ function Section({ s, t }: { s: ReportSection; t: T }) {
 export function ReportView({ projectKey, onBack }: { projectKey: string; onBack: () => void }) {
   const { data: r, loading, error } = useReport(projectKey);
   const t = useT();
+  const { lang } = useI18n();
+  const isPro = useFeature("reports.compliance");
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfErr, setPdfErr] = useState<string | null>(null);
+
+  const downloadPdf = async () => {
+    setPdfErr(null);
+    setPdfBusy(true);
+    try {
+      await downloadCompliancePdf(projectKey, lang === "en" ? "en" : "es");
+    } catch (e) {
+      setPdfErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   if (loading) return <p className="state">{t("report.generating")}</p>;
   if (error || !r) return <p className="state">{t("report.loadError", { error: error ?? "—" })}</p>;
@@ -202,6 +221,16 @@ export function ReportView({ projectKey, onBack }: { projectKey: string; onBack:
       <div className="report-actions report-noprint">
         <button type="button" className="btn-back" onClick={onBack}>{t("common.backToProject")}</button>
         <div className="spacer" />
+        {pdfErr && <span className="muted" role="alert" style={{ color: "var(--danger)" }}>{pdfErr}</span>}
+        {isPro ? (
+          <button type="button" className="btn sm ext-btn" disabled={pdfBusy} onClick={downloadPdf}>
+            {pdfBusy ? t("report.pdfBusy") : t("report.pdfBtn")}
+          </button>
+        ) : (
+          <Link to="/plans" className="btn sm" title={t("report.pdfPro")}>
+            {t("report.pdfBtn")} <ProBadge />
+          </Link>
+        )}
         <button type="button" className="btn sm" onClick={() => download(`report-${r.key}.md`, toMarkdown(r, t))}>
           {t("common.downloadMd")}
         </button>

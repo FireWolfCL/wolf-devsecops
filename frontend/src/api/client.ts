@@ -74,6 +74,25 @@ export function fetchSpark(days?: number): Promise<PostureSparklines> {
   return request<PostureSparklines>(`/api/v1/projects/history/spark${qs}`);
 }
 
+// Descarga del PDF de cumplimiento (2.4, Pro). No pasa por request() porque la
+// respuesta es binaria (application/pdf), no JSON; adjunta el Bearer a mano y
+// dispara la descarga como blob. 402 = la edición no incluye la feature.
+export async function downloadCompliancePdf(key: string, lang: string): Promise<void> {
+  const token = tokenStorage.get();
+  const resp = await fetch(
+    `/api/v1/projects/${encodeURIComponent(key)}/report.pdf?lang=${encodeURIComponent(lang)}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+  if (!resp.ok) throw new ApiError(resp.status, `HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `wolf-cumplimiento-${key}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export interface Meta {
   project_count: number;
   sources_configured: string[];
