@@ -13,6 +13,9 @@
 #   bash deploy/install.sh                 # asistido / interactive
 #   WOLF_LANG=en bash deploy/install.sh    # fuerza idioma / force language
 #   bash deploy/install.sh --yes --lang es # no interactivo / non-interactive
+#   bash deploy/install.sh --repo ~/mi-app # score real (Sonar+Trivy) de TU repo
+#   bash deploy/install.sh --image nginx:1.27   # score Trivy de TU imagen
+#   bash deploy/install.sh --demo          # escaneo demo (python:3.9-slim), opt-in
 #
 # No pisa un deploy/.env existente (protege instalaciones ya hechas).
 # Never overwrites an existing deploy/.env (protects existing installs).
@@ -23,11 +26,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 ENV_FILE="$HERE/.env"
 PROJECTS="$REPO/config/projects.yaml"
+FRESH_SEED="no"
 
 # ── idioma / language · perfil / profile ─────────────────────────────────────
 L="es"
 ASSUME_YES="no"
 PROFILE=""                             # vacío = sin fijar (se pregunta o default standard)
+T_REPO=""; T_IMAGE=""; T_KEY=""; T_NAME=""; DEMO="no"   # objetivo a escanear / scan target
 for a in "$@"; do
   case "$a" in
     --lang=en|--en) L="en" ;;
@@ -37,16 +42,29 @@ for a in "$@"; do
     --yes|-y) ASSUME_YES="yes" ;;
     --profile=lite|--profile=standard|--profile=full) PROFILE="${a#--profile=}" ;;
     --profile) : ;;                    # --profile <valor> (abajo)
+    --repo=*)  T_REPO="${a#--repo=}" ;;
+    --image=*) T_IMAGE="${a#--image=}" ;;
+    --key=*)   T_KEY="${a#--key=}" ;;
+    --name=*)  T_NAME="${a#--name=}" ;;
+    --demo)    DEMO="yes" ;;
+    --repo|--image|--key|--name) : ;;  # el valor llega como siguiente arg (abajo)
     lite|standard|full) PROFILE="$a" ;;
   esac
 done
-# --lang <valor> y --profile <valor>
+# --lang <valor>, --profile <valor>, --repo/--image/--key/--name <valor>
 prev=""
 for a in "$@"; do
   [ "$prev" = "--lang" ] && L="$a"
   [ "$prev" = "--profile" ] && PROFILE="$a"
+  [ "$prev" = "--repo" ] && T_REPO="$a"
+  [ "$prev" = "--image" ] && T_IMAGE="$a"
+  [ "$prev" = "--key" ] && T_KEY="$a"
+  [ "$prev" = "--name" ] && T_NAME="$a"
   prev="$a"
 done
+[ -n "${WOLF_REPO:-}" ] && T_REPO="$WOLF_REPO"
+[ -n "${WOLF_IMAGE:-}" ] && T_IMAGE="$WOLF_IMAGE"
+[ "${WOLF_DEMO:-}" = "1" ] && DEMO="yes"
 [ -n "${WOLF_LANG:-}" ] && L="$WOLF_LANG"
 [ -n "${WOLF_PROFILE:-}" ] && PROFILE="$WOLF_PROFILE"
 [ "$L" = "en" ] || L="es"
@@ -68,6 +86,14 @@ ask(){
   local q; q="$([ "$L" = en ] && echo "$2" || echo "$1")"
   local reply; printf "${Y}?${X} %s [S/n] " "$q"; read -r reply || true
   case "$reply" in [nN]*) return 1 ;; *) return 0 ;; esac
+}
+
+# ask_no ES EN → como ask pero default NO; con --yes responde no (no interactivo).
+ask_no(){
+  [ "$ASSUME_YES" = "yes" ] && return 1
+  local q; q="$([ "$L" = en ] && echo "$2" || echo "$1")"
+  local reply; printf "${Y}?${X} %s [s/N] " "$q"; read -r reply || true
+  case "$reply" in [sSyY]*) return 0 ;; *) return 1 ;; esac
 }
 
 # ── generadores de secretos (sin depender de python) ────────────────────────
@@ -118,6 +144,29 @@ case "$PROFILE" in
     ;;
 esac
 ok "Perfil: $PROFILE" "Profile: $PROFILE"
+
+# ── 0c) objetivo a escanear (tu repo / tu imagen) ────────────────────────────
+# Sin --repo/--image/--demo: pregunta (interactivo) o no escanea nada (--yes / sin TTY).
+# NUNCA cae al demo salvo --demo.
+if [ -z "$T_REPO" ] && [ -z "$T_IMAGE" ] && [ "$DEMO" != "yes" ] && [ "$ASSUME_YES" != "yes" ]; then
+  say "\n  ¿Qué quieres analizar? (Enter = omitir; luego: bash deploy/scan-target.sh)" \
+      "\n  What do you want to analyze? (Enter = skip; later: bash deploy/scan-target.sh)"
+  printf "  %s " "$([ "$L" = en ] && echo 'Local repo path:' || echo 'Ruta local de tu repo:')"; read -r T_REPO || true
+  printf "  %s " "$([ "$L" = en ] && echo 'Container image (name[:tag]):' || echo 'Imagen de contenedor (nombre[:tag]):')"; read -r T_IMAGE || true
+  if [ -z "$T_REPO" ] && [ -z "$T_IMAGE" ]; then
+    ask_no "¿Correr el escaneo DEMO (python:3.9-slim) para ver el panel con datos de ejemplo?" \
+           "Run the DEMO scan (python:3.9-slim) to see the panel with sample data?" && DEMO="yes"
+  fi
+fi
+case "$T_REPO" in "~"|"~/"*) T_REPO="$HOME${T_REPO#\~}" ;; esac
+if [ -n "$T_REPO" ]; then
+  [ -d "$T_REPO" ] || die "El repo no existe o no es un directorio: $T_REPO" "Repo does not exist or is not a directory: $T_REPO"
+  T_REPO="$(cd "$T_REPO" && pwd -P)"
+fi
+if [ -n "$T_IMAGE" ] && ! printf '%s' "$T_IMAGE" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/:@-]*$'; then
+  die "Nombre de imagen inválido: $T_IMAGE" "Invalid image name: $T_IMAGE"
+fi
+HAS_TARGET="no"; { [ -n "$T_REPO" ] || [ -n "$T_IMAGE" ]; } && HAS_TARGET="yes"
 
 # ── 1) preflight ─────────────────────────────────────────────────────────────
 step "Requisitos previos" "Prerequisites"
@@ -180,6 +229,7 @@ if [ -f "$PROJECTS" ]; then
   ok "config/projects.yaml ya existe — se conserva." "config/projects.yaml already exists — kept."
 elif [ -f "$PROJECTS_SEED" ]; then
   cp "$PROJECTS_SEED" "$PROJECTS"
+  FRESH_SEED="yes"
   ok "config/projects.yaml creado desde la plantilla install." "config/projects.yaml seeded from the install template."
 else
   warn "No hay plantilla de proyectos; el panel arrancará vacío (agrégalos en /admin/settings)." \
@@ -196,6 +246,16 @@ else
       "This builds the images and pulls Sonar/DefectDojo/Trivy. The first run takes several minutes."
 fi
 ( cd "$REPO" && $DC -f "$COMPOSE_FILE" up -d --build )
+
+# ── 4b) escaneo DEMO (opt-in con --demo) ─────────────────────────────────────
+# Idéntico al comportamiento histórico: trivy image python:3.9-slim → wolf-cloud.json.
+if [ "$DEMO" = "yes" ]; then
+  step "Escaneo demo (python:3.9-slim)" "Demo scan (python:3.9-slim)"
+  ( cd "$REPO" && $DC -f "$COMPOSE_FILE" --profile demo run --rm trivy-scan ) \
+    && ok "Reporte demo publicado (wolf-cloud.json)." "Demo report published (wolf-cloud.json)." \
+    || warn "El escaneo demo falló; reintenta: $DC -f deploy/$(basename "$COMPOSE_FILE") --profile demo run --rm trivy-scan" \
+            "Demo scan failed; retry: $DC -f deploy/$(basename "$COMPOSE_FILE") --profile demo run --rm trivy-scan"
+fi
 
 # ── 5) esperar salud ─────────────────────────────────────────────────────────
 step "Esperando a que el panel responda" "Waiting for the panel to come up"
@@ -228,6 +288,31 @@ if ask "$Q_ES" "$Q_EN"; then
 else
   say "Sáltalo por ahora: conecta las fuentes desde el panel → Admin → Integraciones." \
       "Skipped: connect sources later from the panel → Admin → Integrations."
+fi
+
+# ── 6a) escanear TU objetivo (tras provision-sources.sh: necesita SONAR_TOKEN) ─
+if [ "$HAS_TARGET" = "yes" ]; then
+  step "Escaneando tu proyecto (Trivy + Sonar)" "Scanning your project (Trivy + Sonar)"
+  # El demo de la semilla (wolf-cloud) sobra si el operador trae su objetivo.
+  if [ "$FRESH_SEED" = "yes" ] && [ "$DEMO" != "yes" ] && [ -f "$PROJECTS" ]; then
+    ( # shellcheck disable=SC1091
+      . "$HERE/scan-common.sh"
+      WOLF_COMPOSE_FILE="$COMPOSE_FILE" scan_helper drop "$PROJECTS" --key wolf-cloud >/dev/null 2>&1 ) || true
+  fi
+  SCAN_ARGS=()
+  [ -n "$T_REPO" ]  && SCAN_ARGS+=(--repo "$T_REPO")
+  [ -n "$T_IMAGE" ] && SCAN_ARGS+=(--image "$T_IMAGE")
+  [ -n "$T_KEY" ]   && SCAN_ARGS+=(--key "$T_KEY")
+  [ -n "$T_NAME" ]  && SCAN_ARGS+=(--name "$T_NAME")
+  if WOLF_COMPOSE_FILE="$COMPOSE_FILE" bash "$HERE/scan-target.sh" "${SCAN_ARGS[@]}"; then
+    ok "Tu score real ya está en el panel." "Your real score is now in the panel."
+  else
+    warn "El escaneo terminó con avisos; reintenta: bash deploy/scan-target.sh ${SCAN_ARGS[*]}" \
+         "Scan finished with warnings; retry: bash deploy/scan-target.sh ${SCAN_ARGS[*]}"
+  fi
+elif [ "$DEMO" != "yes" ]; then
+  say "No se escaneó nada (sin --repo/--image/--demo). Cuando quieras: bash deploy/scan-target.sh --repo <ruta>" \
+      "Nothing was scanned (no --repo/--image/--demo). Whenever you want: bash deploy/scan-target.sh --repo <path>"
 fi
 
 # ── 6b) Harbor (solo perfil full) ────────────────────────────────────────────

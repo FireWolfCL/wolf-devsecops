@@ -261,14 +261,15 @@ services:
       image --quiet --scanners vuln --format json
       --output /reports/wolf-cloud.json python:3.9-slim
     restart: "no"
+    # DEMO opt-in: no corre en un `up` normal. Se dispara con `install.sh --demo` o
+    #   docker compose -f <este archivo> --profile demo run --rm trivy-scan
+    profiles: ["demo"]
 
+  # Sirve el volumen de reportes; arranca aunque esté vacío (sin acoplarse al demo).
   trivy:
     image: nginx:1.27-alpine
     volumes:
       - trivy_reports:/usr/share/nginx/html:ro
-    depends_on:
-      trivy-scan:
-        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

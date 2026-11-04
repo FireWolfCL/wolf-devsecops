@@ -16,13 +16,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 LIST="$HERE/projects.list"
 COMPOSE="$HERE/docker-compose.install.yml"
-TRIVY_IMG="aquasec/trivy:0.56.2"
-RVOL="wolf-devsecops_trivy_reports"
-CVOL="wolf-devsecops_trivy_cache"
-# Trivy fs NO respeta .gitignore: sin esto escanea caches/artefactos/volúmenes de
-# datos (p. ej. .pytest_cache con fixtures dummy de tests de secretos, o la llave
-# que Harbor se autogenera en su volumen) y los reporta como "secretos" críticos.
-TRIVY_SKIP='**/.pytest_cache,**/node_modules,**/.venv,**/venv,**/__pycache__,**/dist,**/build,**/.git,**/coverage,**/harbor/harbor,**/defectdojo/media,**/.mypy_cache,**/.ruff_cache'
+# Constantes compartidas (TRIVY_IMG, RVOL, CVOL, TRIVY_SKIP): ver scan-common.sh.
+# shellcheck disable=SC1091
+. "$HERE/scan-common.sh"
 
 # Easy-add: cada argumento se agrega a la lista (sin duplicar).
 for extra in "$@"; do
