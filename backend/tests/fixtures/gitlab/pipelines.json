@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1234,
+    "iid": 42,
+    "project_id": 7,
+    "status": "success",
+    "ref": "main",
+    "sha": "a1b2c3d4",
+    "web_url": "https://gitlab.example.com/grupo/wolf-cloud/-/pipelines/1234",
+    "created_at": "2026-11-03T10:00:00.000Z",
+    "updated_at": "2026-11-03T10:12:34.000Z"
+  }
+]

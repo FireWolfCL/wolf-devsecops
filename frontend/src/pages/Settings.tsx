@@ -88,6 +88,7 @@ function SourcesSection() {
 // ─── Proyectos ──────────────────────────────────────────────────────────────
 const SOURCES_EXAMPLE = `{
   "github": { "repo": "owner/repo", "ci_workflow": "ci.yml" },
+  "gitlab": { "project": "group/repo", "ref": "main" },
   "defectdojo": { "product": "Product name" }
 }`;
 

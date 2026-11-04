@@ -213,6 +213,11 @@ class Aggregator:
             links["harbor"] = f"{harbor}/harbor/projects"
         if project.github and project.github.repo:
             links["github"] = f"https://github.com/{quote(project.github.repo, safe='/')}"
+        if project.gitlab and "gitlab" in self._config.sources:
+            gl_base = self._config.sources["gitlab"].url.rstrip("/")
+            if gl_base.endswith("/api/v4"):
+                gl_base = gl_base[: -len("/api/v4")].rstrip("/")
+            links["gitlab"] = f"{gl_base}/{quote(project.gitlab.project, safe='/')}"
         return links
 
     # Qué enlace de proyecto corresponde a cada pestaña del dashboard de herramientas.
@@ -223,9 +228,18 @@ class Aggregator:
         "github": "github",
     }
 
+    def _forge_source(self, project: ProjectConfig) -> str | None:
+        """Qué fuente provee CI/release: GitHub o GitLab (1.3). GitHub gana si ambos
+        están configurados. None = el proyecto no usa ningún forge."""
+        for name in ("github", "gitlab"):
+            if name in self._config.sources and self._project_uses(project, name):
+                return name
+        return None
+
     async def get_summary(self, project: ProjectConfig) -> ProjectSummary:
+        forge = self._forge_source(project) or "github"
         ci, findings, quality, release, containers = await asyncio.gather(
-            self._fetch_block(project, "github"),
+            self._fetch_block(project, forge),
             self._fetch_block(project, "defectdojo"),
             self._fetch_block(project, "sonarqube"),
             self._release_block(project),
@@ -354,15 +368,16 @@ class Aggregator:
         return None  # github: no hay "home" único; el enlace es por repo (en cada fila)
 
     async def _release_block(self, project: ProjectConfig) -> SourceResult:
-        # Release/SBOM se derivan de GitHub (F5). Misma caché + degradación.
-        if "github" not in self._config.sources or project.github is None:
+        # Release/SBOM se derivan del forge del proyecto: GitHub o GitLab (F5, 1.3).
+        forge = self._forge_source(project)
+        if forge is None:
             return SourceResult(status=SourceStatus.not_configured)
-        connector = self._build_connector("github")
+        connector = self._build_connector(forge)
         if connector is None or not hasattr(connector, "fetch_release"):
             return SourceResult(status=SourceStatus.not_configured)
 
         return await self._cached_fetch(
-            f"{project.key}:github:release", lambda: connector.fetch_release(project)
+            f"{project.key}:{forge}:release", lambda: connector.fetch_release(project)
         )
 
     async def get_dependencies(self, project: ProjectConfig) -> SourceResult:

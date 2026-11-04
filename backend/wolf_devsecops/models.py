@@ -139,7 +139,7 @@ class ProjectListItem(BaseModel):  # versión liviana para el listado
 
 class SourceDetail(BaseModel):  # detalle crudo-normalizado por fuente
     project_key: str
-    source: Literal["github", "defectdojo", "sonarqube", "wss", "harbor", "trivy"]
+    source: Literal["github", "gitlab", "defectdojo", "sonarqube", "wss", "harbor", "trivy"]
     status: SourceStatus
     fetched_at: datetime | None = None
     payload: dict = {}

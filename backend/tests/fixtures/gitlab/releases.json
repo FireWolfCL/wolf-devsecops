@@ -1,0 +1,15 @@
+[
+  {
+    "tag_name": "v2.4.0",
+    "name": "Wolf Cloud 2.4.0",
+    "released_at": "2026-10-28T09:00:00.000Z",
+    "created_at": "2026-10-28T08:55:00.000Z",
+    "_links": { "self": "https://gitlab.example.com/grupo/wolf-cloud/-/releases/v2.4.0" },
+    "assets": {
+      "links": [
+        { "name": "sbom.cyclonedx.json", "url": "https://gitlab.example.com/grupo/wolf-cloud/-/package_files/99/download" },
+        { "name": "checksums.txt", "url": "https://gitlab.example.com/grupo/wolf-cloud/-/package_files/98/download" }
+      ]
+    }
+  }
+]

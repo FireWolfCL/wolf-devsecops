@@ -9,6 +9,7 @@ from __future__ import annotations
 from .base import Connector
 from .defectdojo import DefectDojoConnector
 from .github import GitHubConnector
+from .gitlab import GitLabConnector
 from .harbor import HarborConnector
 from .sonarqube import SonarQubeConnector
 from .trivy import TrivyConnector
@@ -16,6 +17,7 @@ from .wss import WSSConnector
 
 CONNECTOR_REGISTRY: dict[str, type[Connector]] = {
     GitHubConnector.source_name: GitHubConnector,
+    GitLabConnector.source_name: GitLabConnector,  # CI + release (forge alterno)
     DefectDojoConnector.source_name: DefectDojoConnector,
     SonarQubeConnector.source_name: SonarQubeConnector,
     WSSConnector.source_name: WSSConnector,

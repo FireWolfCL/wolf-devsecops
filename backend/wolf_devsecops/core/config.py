@@ -38,6 +38,14 @@ class GitHubProjectConfig(BaseModel):
     ci_workflow: str = "ci.yml"
 
 
+class GitLabProjectConfig(BaseModel):
+    # CI (pipelines) y releases desde GitLab. `project` es la ruta completa
+    # ("grupo/subgrupo/repo") o el id numérico; se URL-encodea al llamar la API.
+    # `ref` (opcional) acota los pipelines a una rama.
+    project: str
+    ref: str | None = None
+
+
 class DefectDojoProjectConfig(BaseModel):
     product: str
 
@@ -68,6 +76,7 @@ class ProjectConfig(BaseModel):
     name: str
     org: str = "Wolf"  # organización dueña (Wolf vs externas como lsst-it)
     github: GitHubProjectConfig | None = None
+    gitlab: GitLabProjectConfig | None = None
     defectdojo: DefectDojoProjectConfig | None = None
     sonarqube: SonarProjectConfig | None = None
     wss: WSSProjectConfig | None = None

@@ -20,18 +20,23 @@ sources:
   sonarqube:
     base_url: "http://localhost:9000"
     token_env: "SONAR_TOKEN"
+  # GitLab como forge alterno (CI por pipelines + releases). Usa github O gitlab por
+  # proyecto; si defines ambos, gana GitHub. base_url = instancia (se le añade /api/v4).
+  # gitlab:
+  #   base_url: "https://gitlab.com"
+  #   token_env: "GITLAB_TOKEN"
 
 # Proyectos a mostrar en la consola.
 projects:
-  - key: "cicd"
-    name: "CICD"
+  - key: "wolf-cloud"
+    name: "Wolf-Cloud"
     github:
-      repo: "FireWolfCL/wolf-devsecops"
+      repo: "FireWolfCL/Wolf-Cloud"
       ci_workflow: "ci.yml"
     defectdojo:
-      product: "CICD"
+      product: "Wolf-Cloud"
     sonarqube:
-      project_key: "cicd"
+      project_key: "wolf-cloud"
 
   # Añade los tuyos. Ejemplo de un proyecto que solo usa GitHub + DefectDojo:
   # - key: "mi-proyecto"
@@ -41,3 +46,12 @@ projects:
   #     ci_workflow: "ci.yml"
   #   defectdojo:
   #     product: "Mi Proyecto"
+
+  # Ejemplo con GitLab como forge (CI + releases desde GitLab en vez de GitHub):
+  # - key: "mi-proyecto-gl"
+  #   name: "Mi Proyecto GL"
+  #   gitlab:
+  #     project: "mi-grupo/mi-repo"   # ruta completa o id numérico
+  #     ref: "main"                   # opcional: rama para filtrar pipelines
+  #   sonarqube:
+  #     project_key: "mi-proyecto-gl"

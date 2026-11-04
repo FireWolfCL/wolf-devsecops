@@ -262,6 +262,12 @@ export function ProjectDetailView({
   const t = useT();
   const { data, loading, error, reload } = useProjectSummary(projectKey);
 
+  // Forge del proyecto (CI + release): GitHub o GitLab (1.3). Sin github pero con
+  // gitlab → etiquetas y deep-link de GitLab.
+  const isGitlab = Boolean(data?.links?.gitlab) && !data?.links?.github;
+  const forgeName = isGitlab ? "GitLab" : "GitHub";
+  const forgeLink = data?.links?.github ?? data?.links?.gitlab;
+
   const statuses: SourceStatus[] = data
     ? [data.ci.status, data.findings.status, data.containers?.status ?? "not_configured", data.quality.status, data.release.status]
     : [];
@@ -360,10 +366,10 @@ export function ProjectDetailView({
               <Block
                 index={2}
                 title={t("detail.t.ci")}
-                source="GitHub"
+                source={forgeName}
                 result={data.ci}
-                link={data.links?.github}
-                connectVendor="GitHub"
+                link={forgeLink}
+                connectVendor={forgeName}
                 render={(ci) => (
                   <>
                     <Row k={t("detail.row.status")} v={ci.status} />
@@ -392,10 +398,10 @@ export function ProjectDetailView({
               <Block
                 index={4}
                 title={t("detail.t.release")}
-                source="GitHub"
+                source={forgeName}
                 result={data.release}
-                link={data.links?.github}
-                connectVendor="GitHub"
+                link={forgeLink}
+                connectVendor={forgeName}
                 render={(r) => (
                   <>
                     <Row k={t("detail.row.tag")} v={r.tag ?? "—"} />
