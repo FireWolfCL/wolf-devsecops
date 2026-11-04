@@ -117,6 +117,28 @@ export function FindingsDetail({
     () => fetchSourceDetail(projectKey, source),
     [projectKey, source],
   );
+  // 2.3 — Solape Trivy ↔ DefectDojo: en Contenedores, un CVE que también está en
+  // DefectDojo se marca "en triage". El cruce se hace en la vista (no en el
+  // conector Trivy) para no romper la independencia de fuentes (ADR-001). Si
+  // DefectDojo no está configurado, el fetch cae a {} y no se muestra nada.
+  const isContainers = source === "trivy" || source === "containers";
+  const { data: triage } = useAsync<Record<string, string>>(
+    () =>
+      isContainers
+        ? fetchSourceDetail(projectKey, "defectdojo")
+            .then((d) => {
+              const m: Record<string, string> = {};
+              for (const g of ((d.payload?.findings as TrivyFinding[] | undefined) ?? [])) {
+                if (g.id) m[g.id.toUpperCase()] = g.status ?? "active";
+              }
+              return m;
+            })
+            .catch(() => ({}))
+        : Promise.resolve({}),
+    [projectKey, isContainers],
+  );
+  const triageOf = (id: string | null): string | null =>
+    isContainers && id ? (triage?.[id.toUpperCase()] ?? null) : null;
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [showPlan, setShowPlan] = useState(false);
@@ -266,7 +288,17 @@ export function FindingsDetail({
                   {t(SEV_KEY[f.severity] ?? "sev.unknown")}
                 </span>
               </td>
-              <td className="mono">{f.id ?? "—"}</td>
+              <td className="mono">
+                {f.id ?? "—"}
+                {(() => {
+                  const st = triageOf(f.id);
+                  return st ? (
+                    <span className="triage-badge" title={t("findings.triage.tip", { state: t(`findings.triage.state.${st}`) })}>
+                      {t("findings.triage.badge")}
+                    </span>
+                  ) : null;
+                })()}
+              </td>
               <td className="mono muted">
                 {f.pkg ? `${f.pkg} ${f.installed ?? ""}`.trim() : (f.target ?? "—")}
               </td>

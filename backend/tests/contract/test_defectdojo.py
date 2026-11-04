@@ -59,3 +59,19 @@ async def test_defectdojo_detalle_lleva_categoria():
     findings = detail.payload["findings"]
     assert all("category" in f for f in findings)
     assert {f["category"] for f in findings} == {"secrets", "sast", "sca", "dast"}
+
+
+@pytest.mark.asyncio
+async def test_defectdojo_detalle_lleva_estado_de_gestion():
+    # 2.3: cada finding lleva su estado de gestión (para marcar «en triage» en
+    # Contenedores) y el CVE queda como id para cruzar con Trivy.
+    detail = await _connector().fetch_detail(_project())
+    by_title = {f["title"]: f for f in detail.payload["findings"]}
+    assert all("status" in f for f in detail.payload["findings"])
+    # El orden de prioridad del estado: riesgo aceptado > en revisión > ... > activo.
+    assert by_title["Hardcoded AWS secret key"]["status"] == "under_review"
+    assert by_title["Outdated dependency (CVE-2024-1234)"]["status"] == "verified"
+    assert by_title["Reflected XSS"]["status"] == "risk_accepted"
+    assert by_title["SQL injection"]["status"] == "active"
+    # El CVE queda como id → es lo que cruza con el CVE de Trivy en la vista.
+    assert by_title["Outdated dependency (CVE-2024-1234)"]["id"] == "CVE-2024-1234"

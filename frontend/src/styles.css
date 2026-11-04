@@ -515,6 +515,11 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .tool-table tr.detail-row td { padding: 0; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
 .findings-detail { padding: 14px 18px 18px; }
 .findings-head { font-size: 12.5px; margin-bottom: 10px; }
+/* 2.3 — nota de pilar (exposición vs. gestión) y badge «en triage». */
+.pillar-note { font-size: 12px; margin: 0 0 10px; line-height: 1.4; }
+.triage-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px;
+  font-family: var(--font); font-size: 10px; font-weight: 700; letter-spacing: .3px; white-space: nowrap;
+  color: var(--warn); background: rgba(245,165,36,.14); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); }
 .findings-loading { padding: 14px 18px; }
 .findings-table { width: 100%; border-collapse: collapse; }
 .findings-table th { text-align: left; padding: 7px 10px; font-size: 11px; text-transform: uppercase;

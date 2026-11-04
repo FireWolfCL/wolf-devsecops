@@ -3,6 +3,7 @@
   "results": [
     {
       "id": 1, "title": "Hardcoded AWS secret key", "severity": "Critical", "active": true,
+      "under_review": true,
       "related_fields": { "test": { "id": 11, "test_type": { "id": 101, "name": "Gitleaks Scan" } } }
     },
     {
@@ -11,11 +12,13 @@
     },
     {
       "id": 3, "title": "Outdated dependency (CVE-2024-1234)", "severity": "Medium", "active": true,
+      "cve": "CVE-2024-1234", "verified": true,
       "component_name": "openssl", "component_version": "1.1.1",
       "related_fields": { "test": { "id": 13, "test_type": { "id": 103, "name": "Anchore Grype" } } }
     },
     {
       "id": 4, "title": "Reflected XSS", "severity": "Low", "active": true,
+      "risk_accepted": true,
       "related_fields": { "test": { "id": 14, "test_type": { "id": 104, "name": "ZAP Scan" } } }
     }
   ]

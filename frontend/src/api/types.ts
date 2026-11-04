@@ -192,6 +192,8 @@ export interface TrivyFinding {
   kind: "vuln" | "misconfig";
   /** Categoría por tipo de escaneo (6.2, solo DefectDojo): secrets|sast|sca|container|iac|dast|other. */
   category?: string;
+  /** Estado de gestión en DefectDojo (2.3): active|verified|mitigated|under_review|risk_accepted. */
+  status?: string | null;
   id: string | null; // CVE / regla
   pkg: string | null;
   installed: string | null;

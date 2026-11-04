@@ -143,13 +143,14 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
 /** Counts + toggle «Ver detalle» → lista real (QUÉ está afectado, CÓMO mejorarlo).
  * Reutilizable: Contenedores (source="trivy") y Hallazgos (source="defectdojo"). */
 function FindingsBlock({
-  projectKey, source, f, status, barTitle, selectable = false,
+  projectKey, source, f, status, barTitle, noteKey, selectable = false,
 }: {
   projectKey: string;
   source: string;
   f: FindingsSummary;
   status: SourceStatus;
   barTitle: string;
+  noteKey?: string; // 2.3: nota que explica el pilar (exposición vs. gestión)
   selectable?: boolean;
 }) {
   const t = useT();
@@ -157,6 +158,7 @@ function FindingsBlock({
   const canExpand = (status === "ok" || status === "stale") && f.total_active > 0;
   return (
     <>
+      {noteKey && <p className="pillar-note muted">{t(noteKey)}</p>}
       <SeverityBar title={barTitle} counts={f.counts} empty={null} />
       <Row k={t("detail.active")} v={f.total_active} />
       {canExpand && (
@@ -286,6 +288,7 @@ export function ProjectDetailView({
                     f={f}
                     status={data.findings.status}
                     barTitle={t("detail.severity")}
+                    noteKey="detail.note.findings"
                     selectable={data.org === "Wolf"}
                   />
                 )}
@@ -304,6 +307,7 @@ export function ProjectDetailView({
                     f={f}
                     status={data.containers.status}
                     barTitle={t("detail.imageFs")}
+                    noteKey="detail.note.containers"
                     selectable={data.org === "Wolf"}
                   />
                 )}

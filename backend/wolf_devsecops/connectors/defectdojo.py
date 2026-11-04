@@ -68,6 +68,24 @@ def _category(finding: dict) -> str:
     return "other"
 
 
+def _finding_status(finding: dict) -> str:
+    """Estado de gestión del finding en DefectDojo (2.3: el solape Trivy↔DefectDojo).
+
+    Un CVE que aparece también en Contenedores se marca 'en triage' leyendo este
+    estado: el equipo ya lo está tratando. Orden de prioridad del rótulo:
+    riesgo aceptado > en revisión > mitigado > verificado > activo.
+    """
+    if finding.get("risk_accepted"):
+        return "risk_accepted"
+    if finding.get("under_review"):
+        return "under_review"
+    if finding.get("is_mitigated") or finding.get("mitigated"):
+        return "mitigated"
+    if finding.get("verified"):
+        return "verified"
+    return "active"
+
+
 class DefectDojoConnector(Connector):
     source_name = "defectdojo"
     supported_versions = ">=2.30"
@@ -165,6 +183,7 @@ class DefectDojoConnector(Connector):
             out.append({
                 "kind": "vuln",
                 "category": _category(f),  # secrets|sast|sca|container|iac|dast|other (6.2)
+                "status": _finding_status(f),  # gestión en DefectDojo → 'en triage' (2.3)
                 "id": f.get("cve") or f.get("vuln_id_from_tool") or None,
                 "pkg": pkg,
                 "installed": ver,
