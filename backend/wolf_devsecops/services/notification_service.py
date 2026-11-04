@@ -9,13 +9,9 @@ Sin secretos en logs. Los tokens viven en el entorno (WOLF_TELEGRAM_*, WOLF_SMTP
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import smtplib
 from datetime import UTC, datetime, timedelta
-from email.message import EmailMessage
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +19,7 @@ from ..edition import FEATURE_NOTIFICATIONS, is_enabled
 from ..models_db.config import SourceConfigRow, SystemConfigRow
 from ..models_db.events import ProjectEvent
 from ..settings import Settings
+from . import notification_channels as channels
 
 log = logging.getLogger(__name__)
 
@@ -32,17 +29,29 @@ _REMINDER_MARKER = "token_reminder_last"  # SystemConfigRow: {source: iso del ú
 
 
 def _has_channel(settings: Settings) -> bool:
-    # El envío EXTERNO de alertas (Telegram/email/bot) es feature Pro. En Community
-    # la campana in-app + Novedades siguen funcionando (son base); solo no sale nada
-    # por canales externos. Las novedades quedan pendientes y se despachan si sube a Pro.
+    # El envío EXTERNO de alertas es feature Pro. En Community la campana in-app +
+    # Novedades siguen funcionando (son base); solo no sale nada por canales externos.
+    # Las novedades quedan pendientes y se despachan si sube a Pro. El SEAM de canales
+    # (notification_channels) decide "configurado"; aquí solo se suma el gate de edición.
     if not is_enabled(FEATURE_NOTIFICATIONS):
         return False
-    return bool(settings.telegram_bot_token and settings.telegram_chat_id) or bool(
-        settings.smtp_host and settings.notify_email_to
-    )
+    return bool(channels.configured_channels(settings))
+
+
+# Back-compat: envío directo por un canal concreto (lo usa algún call-site histórico
+# y los tests). Delegan en el seam para no duplicar la lógica de transporte.
+async def send_telegram(settings: Settings, text: str) -> bool:
+    return await channels.TelegramChannel().send(settings, "Wolf DevSecOps", text)
+
+
+async def send_email(settings: Settings, subject: str, body_html: str) -> bool:
+    return await channels.EmailChannel().send(settings, subject, body_html)
+
+
 _ICON = {
     "new_critical": "🔴", "resolved_critical": "✅", "new_high": "🟠",
     "resolved_high": "✅", "improved": "📈", "worsened": "📉",
+    "ci_failed": "🚧", "gate_error": "🛑",
 }
 
 
@@ -65,6 +74,10 @@ def _line(ev: ProjectEvent, lang: str) -> str:
         case "worsened":
             body = (f"empeoró: {ev.band_from} → {ev.band_to}" if es
                     else f"worsened: {ev.band_from} → {ev.band_to}")
+        case "ci_failed":
+            body = "CI en rojo" if es else "CI is failing"
+        case "gate_error":
+            body = "quality gate en ERROR" if es else "quality gate is ERROR"
         case _:
             body = ev.kind
     return f"{icon} <b>{ev.project_key}</b> — {body}"
@@ -76,56 +89,6 @@ def build_message(events: list[ProjectEvent], lang: str) -> str:
             else "🐺 <b>Wolf DevSecOps — what's new</b>")
     lines = [_line(e, lang) for e in events]
     return head + "\n" + "\n".join(lines)
-
-
-async def send_telegram(settings: Settings, text: str) -> bool:
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
-        return False
-    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.post(url, json={
-                "chat_id": settings.telegram_chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            })
-        if r.status_code != 200:
-            log.warning("telegram sendMessage HTTP %s", r.status_code)
-            return False
-        return True
-    except httpx.HTTPError as exc:
-        log.warning("telegram error: %s", exc)
-        return False
-
-
-def _send_email_sync(settings: Settings, subject: str, body_html: str) -> bool:
-    recipients = [a.strip() for a in settings.notify_email_to.split(",") if a.strip()]
-    if not settings.smtp_host or not recipients:
-        return False
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.smtp_from or settings.smtp_user or "wolf-devsecops@localhost"
-    msg["To"] = ", ".join(recipients)
-    # Texto plano (fallback) + HTML.
-    plain = body_html.replace("<b>", "").replace("</b>", "")
-    msg.set_content(plain)
-    msg.add_alternative(f"<html><body>{body_html.replace(chr(10), '<br>')}</body></html>", subtype="html")
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as s:
-            if settings.smtp_starttls:
-                s.starttls()
-            if settings.smtp_user:
-                s.login(settings.smtp_user, settings.smtp_password)
-            s.send_message(msg)
-        return True
-    except (smtplib.SMTPException, OSError) as exc:
-        log.warning("smtp error: %s", exc)
-        return False
-
-
-async def send_email(settings: Settings, subject: str, body_html: str) -> bool:
-    return await asyncio.to_thread(_send_email_sync, settings, subject, body_html)
 
 
 async def dispatch_pending(
@@ -153,10 +116,7 @@ async def dispatch_pending(
     if to_send:
         text = build_message(to_send, settings.notify_lang)
         subject = "Wolf DevSecOps — novedades" if settings.notify_lang != "en" else "Wolf DevSecOps — what's new"
-        if await send_telegram(settings, text):
-            channels_ok.append("telegram")
-        if await send_email(settings, subject, text):
-            channels_ok.append("email")
+        channels_ok = await channels.broadcast(settings, subject, text)
 
     # Marca TODO lo pendiente (enviado o filtrado) para no re-evaluarlo.
     now = datetime.now(UTC)
@@ -211,11 +171,7 @@ async def check_token_expiry(session: AsyncSession, settings: Settings) -> dict:
     text = "\n".join(lines)
     subject = "Wolf DevSecOps — token por vencer" if es else "Wolf DevSecOps — token expiring"
 
-    channels: list[str] = []
-    if await send_telegram(settings, text):
-        channels.append("telegram")
-    if await send_email(settings, subject, text):
-        channels.append("email")
+    ch_ok = await channels.broadcast(settings, subject, text)
 
     for r in to_send:
         sent[r.name] = now.isoformat()
@@ -224,7 +180,7 @@ async def check_token_expiry(session: AsyncSession, settings: Settings) -> dict:
     else:
         marker.value = {"v": sent}
     await session.commit()
-    return {"reminded": len(to_send), "channels": channels}
+    return {"reminded": len(to_send), "channels": ch_ok}
 
 
 async def send_test(settings: Settings) -> dict:
@@ -232,9 +188,4 @@ async def send_test(settings: Settings) -> dict:
     es = settings.notify_lang != "en"
     text = ("🐺 <b>Wolf DevSecOps</b> — prueba de notificaciones. Si ves esto, el canal funciona."
             if es else "🐺 <b>Wolf DevSecOps</b> — notifications test. If you see this, the channel works.")
-    ok: list[str] = []
-    if await send_telegram(settings, text):
-        ok.append("telegram")
-    if await send_email(settings, "Wolf DevSecOps — test", text):
-        ok.append("email")
-    return {"channels": ok}
+    return {"channels": await channels.broadcast(settings, "Wolf DevSecOps — test", text)}

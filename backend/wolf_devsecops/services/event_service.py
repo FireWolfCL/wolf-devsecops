@@ -31,7 +31,7 @@ _COMPLIANCE_DELTA = 5.0  # pp mínimos para un evento de % (sin cambio de banda)
 
 # Taxonomía de kinds para el reporte.
 GOOD_KINDS = {"improved", "resolved_critical", "resolved_high"}
-BAD_KINDS = {"worsened", "new_critical", "new_high"}
+BAD_KINDS = {"worsened", "new_critical", "new_high", "ci_failed", "gate_error"}
 
 
 def _ev(
@@ -83,6 +83,13 @@ def detect(prev: Row | None, new: Row) -> list[ProjectEvent]:
     elif abs(new.compliance_pct - prev.compliance_pct) >= _COMPLIANCE_DELTA:
         up = new.compliance_pct > prev.compliance_pct
         events.append(_ev(new, "improved" if up else "worsened", "good" if up else "warn", prev=prev))
+
+    # CI pasa a rojo y quality gate pasa a ERROR (2.5): solo en la TRANSICIÓN, no
+    # mientras siga igual (no repetir en cada snapshot).
+    if new.ci_status == "failure" and prev.ci_status != "failure":
+        events.append(_ev(new, "ci_failed", "danger", prev=prev))
+    if new.quality_gate == "ERROR" and prev.quality_gate != "ERROR":
+        events.append(_ev(new, "gate_error", "warn", prev=prev))
 
     return events
 

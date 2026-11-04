@@ -36,3 +36,8 @@ class PostureSnapshot(Base):
     # los puntos donde cambió la rúbrica (un salto de score puede deberse a eso,
     # no a una regresión real).
     rubric_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Estado de CI y quality gate al capturar (0009, triggers de notificación 2.5):
+    # al transicionar a failure/ERROR entre snapshots se emite un evento. Nullable:
+    # None = fuente no configurada o filas anteriores a 0009.
+    ci_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    quality_gate: Mapped[str | None] = mapped_column(String(10), nullable=True)

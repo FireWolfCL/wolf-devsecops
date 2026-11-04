@@ -17,6 +17,7 @@ const PERIODS = [7, 30, 90];
 const KIND_COLOR: Record<string, string> = {
   improved: "#34d399", resolved_critical: "#34d399", resolved_high: "#34d399",
   worsened: "#f87171", new_critical: "#f87171", new_high: "#f5a524",
+  ci_failed: "#f87171", gate_error: "#f5a524",
 };
 
 function label(kind: string, lang: Lang): string {
@@ -28,11 +29,13 @@ function label(kind: string, lang: Lang): string {
     case "resolved_critical": return es ? "Críticos resueltos" : "Criticals resolved";
     case "new_high": return es ? "Altos nuevos" : "New highs";
     case "resolved_high": return es ? "Altos resueltos" : "Highs resolved";
+    case "ci_failed": return es ? "CI en rojo" : "CI failing";
+    case "gate_error": return es ? "Quality gate en ERROR" : "Quality gate ERROR";
     default: return kind;
   }
 }
 
-const ORDER = ["resolved_critical", "resolved_high", "improved", "new_critical", "new_high", "worsened"];
+const ORDER = ["resolved_critical", "resolved_high", "improved", "new_critical", "new_high", "worsened", "ci_failed", "gate_error"];
 
 // Marcador geométrico (mismo lenguaje que la campana y las pastillas del panel):
 // glifo de trazo fino sobre un chip teñido con el color del evento. Sin emojis.

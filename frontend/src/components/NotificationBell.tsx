@@ -90,6 +90,8 @@ function text(ev: EventItem, lang: Lang): string {
     case "resolved_high": return es ? `${h} alto(s) resuelto(s)` : `${h} high(s) resolved`;
     case "improved": return es ? `Mejoró: ${ev.band_from} → ${ev.band_to}` : `Improved: ${ev.band_from} → ${ev.band_to}`;
     case "worsened": return es ? `Empeoró: ${ev.band_from} → ${ev.band_to}` : `Worsened: ${ev.band_from} → ${ev.band_to}`;
+    case "ci_failed": return es ? "CI en rojo" : "CI is failing";
+    case "gate_error": return es ? "Quality gate en ERROR" : "Quality gate is ERROR";
     default: return ev.kind;
   }
 }

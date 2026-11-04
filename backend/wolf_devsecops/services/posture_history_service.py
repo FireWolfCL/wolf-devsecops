@@ -41,6 +41,10 @@ def row_from_summary(summary: ProjectSummary, *, now: datetime | None = None) ->
     if posture.score is None:
         return None  # sin datos: no hay punto que graficar
     crit, high, med, low = _severity_totals(summary)
+    # Estado de CI y gate para los triggers de notificación (2.5). None si la fuente
+    # no está configurada (no se dispara alerta por algo que no se mide).
+    ci_status = summary.ci.data.status.value if summary.ci.data is not None else None
+    quality_gate = summary.quality.data.quality_gate if summary.quality.data is not None else None
     return PostureSnapshotRow(
         project_key=summary.key,
         captured_at=now or datetime.now(UTC),
@@ -52,6 +56,8 @@ def row_from_summary(summary: ProjectSummary, *, now: datetime | None = None) ->
         low=low,
         coverage_pct=float(posture.coverage),
         rubric_version=posture.rubric_version,
+        ci_status=ci_status,
+        quality_gate=quality_gate,
     )
 
 

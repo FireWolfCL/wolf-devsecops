@@ -22,8 +22,8 @@ from wolf_devsecops.services import user_service
 from wolf_devsecops.settings import get_settings
 
 # Última migración de alembic (actualizar al agregar una nueva revisión).
-HEAD = "0008_posture_rubric_version"
-_MIGRATION_COUNT = 8  # nº total de revisiones (pendientes en una BD virgen)
+HEAD = "0009_posture_ci_gate"
+_MIGRATION_COUNT = 9  # nº total de revisiones (pendientes en una BD virgen)
 
 
 def _bearer(user):
