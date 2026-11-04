@@ -743,3 +743,7 @@ h3 .card-ext { font-weight: 400; margin-left: auto; }
 .modal-kv dd { margin: 0; overflow-wrap: anywhere; }
 .modal-picks { margin: 6px 0 0; padding-left: 18px; max-height: 180px; overflow-y: auto; font-size: 13px; overflow-wrap: anywhere; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* Filtro por tipo de escaneo en Hallazgos (6.2) */
+.cat-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.cat-filter .chip.on { background: var(--accent); color: #062018; border-color: var(--accent); font-weight: 600; }

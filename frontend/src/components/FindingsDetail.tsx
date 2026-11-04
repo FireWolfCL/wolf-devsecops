@@ -118,6 +118,7 @@ export function FindingsDetail({
     [projectKey, source],
   );
   const [sel, setSel] = useState<Set<number>>(new Set());
+  const [catFilter, setCatFilter] = useState<string | null>(null);
   const [showPlan, setShowPlan] = useState(false);
   const { user } = useAuth();
   const { data: meta } = useMeta();
@@ -139,6 +140,16 @@ export function FindingsDetail({
   if (findings.length === 0) {
     return <p className="muted">—</p>;
   }
+
+  // 6.2: categorías por tipo de escaneo presentes (solo DefectDojo las trae). El
+  // filtro es solo de VISTA: no re-indexa, para no romper la selección de remediación.
+  const catCounts = findings.reduce<Record<string, number>>((acc, f) => {
+    if (f.category) acc[f.category] = (acc[f.category] ?? 0) + 1;
+    return acc;
+  }, {});
+  const cats = Object.keys(catCounts).sort();
+  const showCatFilter = cats.length > 1;
+  const activeCat = catFilter && catCounts[catFilter] ? catFilter : null;
 
   const fixableIdx = findings.map((f, i) => (isFixable(f) ? i : -1)).filter((i) => i >= 0);
   const toggle = (i: number) =>
@@ -169,6 +180,30 @@ export function FindingsDetail({
       <div className="findings-head muted">
         {shown} / {total} — {t("report.howFix")}
       </div>
+
+      {showCatFilter && (
+        <div className="cat-filter" role="group" aria-label={t("findings.cat.filter")}>
+          <button
+            type="button"
+            className={`btn sm chip${activeCat === null ? " on" : ""}`}
+            aria-pressed={activeCat === null}
+            onClick={() => setCatFilter(null)}
+          >
+            {t("findings.cat.all")} ({findings.length})
+          </button>
+          {cats.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`btn sm chip${activeCat === c ? " on" : ""}`}
+              aria-pressed={activeCat === c}
+              onClick={() => setCatFilter(activeCat === c ? null : c)}
+            >
+              {t(`findings.cat.${c}`)} ({catCounts[c]})
+            </button>
+          ))}
+        </div>
+      )}
 
       {selectable && fixableIdx.length > 0 && (
         <div className="remediate-bar">
@@ -212,6 +247,7 @@ export function FindingsDetail({
         </thead>
         <tbody>
           {findings.map((f, i) => (
+            activeCat && f.category !== activeCat ? null : (
             <tr key={`${f.id ?? "x"}-${i}`} className={selectable && sel.has(i) ? "picked" : undefined}>
               {selectable && (
                 <td className="rm-check">
@@ -237,6 +273,7 @@ export function FindingsDetail({
               <td>{f.title || "—"}</td>
               <td className="fix">{fixHint(f, t)}</td>
             </tr>
+            )
           ))}
         </tbody>
       </table>

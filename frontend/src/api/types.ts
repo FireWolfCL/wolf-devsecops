@@ -25,6 +25,8 @@ export interface CISummary {
 export interface FindingsSummary {
   counts: SeverityCount;
   total_active: number;
+  /** Conteo de activos por tipo de escaneo (6.2): secrets, sast, sca, container, iac, dast, other. */
+  categories?: Record<string, number>;
   url: string | null;
 }
 
@@ -188,6 +190,8 @@ export interface SourceDetail {
 // por igual los conectores Trivy y DefectDojo, para un drill-down uniforme.
 export interface TrivyFinding {
   kind: "vuln" | "misconfig";
+  /** Categoría por tipo de escaneo (6.2, solo DefectDojo): secrets|sast|sca|container|iac|dast|other. */
+  category?: string;
   id: string | null; // CVE / regla
   pkg: string | null;
   installed: string | null;

@@ -22,6 +22,51 @@ _SEV_MAP = {
     "informational": "info",
 }
 
+# Categorías de hallazgo por tipo de escaneo (6.2). Wolf no corre estos escáneres:
+# corren en el CI del proyecto y reportan a DefectDojo; aquí solo LEEMOS y agrupamos.
+# El nombre del test_type (p.ej. "Gitleaks Scan", "Semgrep JSON Report") se mapea a una
+# categoría estable. Orden de evaluación importa: lo específico antes que lo genérico.
+FINDING_CATEGORIES = ("secrets", "sast", "sca", "container", "iac", "dast", "other")
+_CATEGORY_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("secrets", ("gitleaks", "trufflehog", "detect-secrets", "secret")),
+    ("dast", ("zap", "burp", "nikto", "nuclei", "dast", "wfuzz", "arachni")),
+    ("iac", ("checkov", "kics", "terrascan", "tfsec", "trivy config", "trivy operator",
+             "cloudformation", "terraform", "kubescape", "iac")),
+    ("sca", ("grype", "snyk", "dependency", "npm audit", "yarn audit", "safety", "retire",
+             "osv", "composer", "bundler", "sca", "trivy")),  # trivy fs ≈ deps → sca
+    ("container", ("anchore", "clair", "container", "docker", "image scan")),
+    ("sast", ("semgrep", "bandit", "sarif", "spotbugs", "checkmarx", "eslint", "gosec",
+              "brakeman", "sonar", "codeql", "sast")),
+)
+
+
+def _scan_type_name(finding: dict) -> str:
+    """Nombre del test_type de un finding (DefectDojo `related_fields=true`), tolerante
+    a que falte: related_fields.test.test_type.name → tags → ''."""
+    rel = finding.get("related_fields")
+    if isinstance(rel, dict):
+        test = rel.get("test")
+        if isinstance(test, dict):
+            tt = test.get("test_type")
+            if isinstance(tt, dict) and tt.get("name"):
+                return str(tt["name"])
+            if isinstance(tt, str) and tt:
+                return tt
+    tags = finding.get("tags")
+    if isinstance(tags, list) and tags:
+        return " ".join(str(t) for t in tags)
+    return ""
+
+
+def _category(finding: dict) -> str:
+    """Categoría estable del finding a partir del nombre del escáner. 'other' si no calza."""
+    name = _scan_type_name(finding).lower()
+    if name:
+        for cat, needles in _CATEGORY_RULES:
+            if any(n in name for n in needles):
+                return cat
+    return "other"
+
 
 class DefectDojoConnector(Connector):
     source_name = "defectdojo"
@@ -68,7 +113,12 @@ class DefectDojoConnector(Connector):
 
     async def _active_findings(self, product: str) -> dict:
         url = f"{self._base}/api/v2/findings/"
-        params = {"product_name": product, "active": "true", "limit": 100}
+        # related_fields=true trae test.test_type.name para categorizar por tipo de
+        # escaneo (6.2) sin una segunda llamada (ADR-012: una lectura por fuente).
+        params = {
+            "product_name": product, "active": "true", "limit": 100,
+            "related_fields": "true",
+        }
         try:
             async with self._client() as client:
                 resp = await client.get(url, headers=self._headers(), params=params)
@@ -82,12 +132,15 @@ class DefectDojoConnector(Connector):
         dd = project.defectdojo
         payload = await self._active_findings(dd.product if dd else "")
         counts = SeverityCount()
+        categories: dict[str, int] = {}
         for finding in payload.get("results", []):
             key = _SEV_MAP.get(str(finding.get("severity", "")).lower())
             if key:
                 setattr(counts, key, getattr(counts, key) + 1)
+            cat = _category(finding)
+            categories[cat] = categories.get(cat, 0) + 1
         total = payload.get("count", counts.total)
-        return FindingsSummary(counts=counts, total_active=total)
+        return FindingsSummary(counts=counts, total_active=total, categories=categories)
 
     # Orden de severidad para priorizar la lista (crítico primero).
     _SEV_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
@@ -111,6 +164,7 @@ class DefectDojoConnector(Connector):
             fix = mit[:300] if mit else None
             out.append({
                 "kind": "vuln",
+                "category": _category(f),  # secrets|sast|sca|container|iac|dast|other (6.2)
                 "id": f.get("cve") or f.get("vuln_id_from_tool") or None,
                 "pkg": pkg,
                 "installed": ver,

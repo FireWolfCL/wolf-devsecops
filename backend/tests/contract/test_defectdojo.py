@@ -28,9 +28,9 @@ def _connector() -> DefectDojoConnector:
 
 def _project() -> ProjectConfig:
     return ProjectConfig(
-        key="demo-app",
-        name="Demo App",
-        defectdojo=DefectDojoProjectConfig(product="Demo App"),
+        key="wolf-cloud",
+        name="Wolf-Cloud",
+        defectdojo=DefectDojoProjectConfig(product="Wolf-Cloud"),
     )
 
 
@@ -43,3 +43,19 @@ async def test_defectdojo_cuenta_por_severidad():
     assert summary.counts.medium == 1
     assert summary.counts.low == 1
     assert summary.counts.total == 4
+
+
+@pytest.mark.asyncio
+async def test_defectdojo_categoriza_por_tipo_de_escaneo():
+    # 6.2: el test_type de DefectDojo (related_fields) se mapea a categoría estable.
+    summary = await _connector().fetch_summary(_project())
+    assert summary.categories == {"secrets": 1, "sast": 1, "sca": 1, "dast": 1}
+
+
+@pytest.mark.asyncio
+async def test_defectdojo_detalle_lleva_categoria():
+    # 6.2: cada finding del detalle lleva su categoría para el filtro del frontend.
+    detail = await _connector().fetch_detail(_project())
+    findings = detail.payload["findings"]
+    assert all("category" in f for f in findings)
+    assert {f["category"] for f in findings} == {"secrets", "sast", "sca", "dast"}

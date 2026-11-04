@@ -1,9 +1,22 @@
 {
   "count": 4,
   "results": [
-    { "id": 1, "title": "SQL injection", "severity": "Critical", "active": true },
-    { "id": 2, "title": "Outdated dependency", "severity": "High", "active": true },
-    { "id": 3, "title": "Weak cipher", "severity": "Medium", "active": true },
-    { "id": 4, "title": "Verbose error", "severity": "Low", "active": true }
+    {
+      "id": 1, "title": "Hardcoded AWS secret key", "severity": "Critical", "active": true,
+      "related_fields": { "test": { "id": 11, "test_type": { "id": 101, "name": "Gitleaks Scan" } } }
+    },
+    {
+      "id": 2, "title": "SQL injection", "severity": "High", "active": true,
+      "related_fields": { "test": { "id": 12, "test_type": { "id": 102, "name": "Semgrep JSON Report" } } }
+    },
+    {
+      "id": 3, "title": "Outdated dependency (CVE-2024-1234)", "severity": "Medium", "active": true,
+      "component_name": "openssl", "component_version": "1.1.1",
+      "related_fields": { "test": { "id": 13, "test_type": { "id": 103, "name": "Anchore Grype" } } }
+    },
+    {
+      "id": 4, "title": "Reflected XSS", "severity": "Low", "active": true,
+      "related_fields": { "test": { "id": 14, "test_type": { "id": 104, "name": "ZAP Scan" } } }
+    }
   ]
 }

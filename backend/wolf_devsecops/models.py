@@ -65,6 +65,9 @@ class CISummary(BaseModel):  # desde GitHub Actions
 class FindingsSummary(BaseModel):  # desde DefectDojo (o WSS)
     counts: SeverityCount
     total_active: int
+    # Conteo de hallazgos activos por tipo de escaneo (6.2): secrets, sast, sca,
+    # container, iac, dast, other. Vacío si la fuente no expone el tipo.
+    categories: dict[str, int] = Field(default_factory=dict)
     url: HttpUrl | None = None
 
 
