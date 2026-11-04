@@ -409,6 +409,16 @@ main { max-width: 1240px; }
 .ck-pass .ck-score { color: var(--accent); }
 .ck-foot { font-size: 12px; margin: 10px 0 0; }
 
+/* 2.2 — Las 3 acciones que más suben el puntaje. */
+.top-actions { margin: 16px 0; border-left: 3px solid var(--accent); }
+.ta-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.ta-item { display: flex; align-items: center; gap: 12px; }
+.ta-rank { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 13px; color: var(--accent); background: var(--accent-soft); }
+.ta-text { flex: 1 1 auto; min-width: 0; }
+.ta-pts { flex: 0 0 auto; font-weight: 700; color: var(--accent); }
+.ta-foot { font-size: 12px; margin: 10px 0 0; }
+
 /* Panel IA: se conserva tal cual; solo entra con la misma coreografía. */
 .ai-panel { animation: rise var(--motion-slow) var(--ease-out) backwards; animation-delay: 240ms; }
 .btn-back { transition: border-color var(--motion-fast) var(--ease-out); }

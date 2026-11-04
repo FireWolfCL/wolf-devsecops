@@ -61,6 +61,47 @@ function PostureHeader({ posture }: { posture: PostureScore }) {
   );
 }
 
+// 2.2 — "Las 3 acciones que más suben tu puntaje": de los checks en FAIL/PARTIAL,
+// las 3 con mayor peso recuperable (weight − earned). Solo usa el ProjectSummary ya
+// cargado: cero llamadas extra a las fuentes (ADR-012).
+function topActions(checks: CheckResult[], n = 3): { id: string; pts: number }[] {
+  return checks
+    .filter((c) => c.result === "fail" || c.result === "partial")
+    .map((c) => ({ id: c.id, pts: c.weight - c.earned }))
+    .filter((a) => a.pts > 0)
+    .sort((a, b) => b.pts - a.pts)
+    .slice(0, n);
+}
+
+function actionText(id: string, t: TFn): string {
+  const k = `detail.action.${id}`;
+  const v = t(k);
+  return v === k ? checkTitle(id, t) : v;  // si no hay texto accionable, cae al título del check
+}
+
+function TopActionsCard({ checks }: { checks: CheckResult[] }) {
+  const t = useT();
+  const actions = topActions(checks);
+  if (actions.length === 0) return null;
+  return (
+    <section className="card top-actions" aria-label={t("detail.actions.title")}>
+      <h3>{t("detail.actions.title")}</h3>
+      <ol className="ta-list">
+        {actions.map((a, i) => (
+          <li key={a.id} className="ta-item" style={stagger(i)}>
+            <span className="ta-rank" aria-hidden="true">{i + 1}</span>
+            <span className="ta-text">{actionText(a.id, t)}</span>
+            <span className="ta-pts mono" title={t("detail.actions.foot")}>
+              {t("detail.actions.pts", { n: Number.isInteger(a.pts) ? a.pts : a.pts.toFixed(1) })}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="muted ta-foot">{t("detail.actions.foot")}</p>
+    </section>
+  );
+}
+
 function ChecksCard({ checks }: { checks: CheckResult[] }) {
   const t = useT();
   return (
@@ -263,6 +304,10 @@ export function ProjectDetailView({
             <PostureHeader posture={data.posture} />
           ) : (
             <div className="alert info">{t("detail.noScore")}</div>
+          )}
+
+          {data.posture && data.posture.checks.length > 0 && (
+            <TopActionsCard checks={data.posture.checks} />
           )}
 
           <div className="src-strip" aria-label={t("detail.srcStripAria")}>
