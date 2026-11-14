@@ -12,11 +12,11 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from wolf_devsecops.core.cache import TTLCache
 from wolf_devsecops.connectors.base import ConnectorUnavailable
 from wolf_devsecops.connectors.github import GitHubConnector
 from wolf_devsecops.connectors.gitlab import GitLabConnector
 from wolf_devsecops.core.aggregator import Aggregator
+from wolf_devsecops.core.cache import TTLCache
 from wolf_devsecops.core.config import (
     AppConfig,
     GitHubProjectConfig,

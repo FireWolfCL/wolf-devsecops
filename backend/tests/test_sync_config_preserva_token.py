@@ -14,7 +14,7 @@ import asyncio
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 
 from wolf_devsecops.cli import sync_config as sync_cli
 from wolf_devsecops.db import engine as db_engine

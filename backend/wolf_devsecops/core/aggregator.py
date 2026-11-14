@@ -34,7 +34,6 @@ from ..models import (
     PostureOverview,
     ProjectListItem,
     ProjectSummary,
-    ProvenanceInfo,
     QualitySummary,
     RefPosture,
     SeverityCount,
@@ -69,7 +68,7 @@ _STATUS_RANK = {
 class Aggregator:
     def __init__(
         self, config: AppConfig, cache: TTLCache,
-        governance: "GovernanceProvider | None" = None,
+        governance: GovernanceProvider | None = None,
     ) -> None:
         self._config = config
         self._cache = cache

@@ -13,7 +13,6 @@ from sqlalchemy import select
 
 from wolf_devsecops.connectors.base import ConnectorUnavailable
 from wolf_devsecops.connectors.trivy import TrivyConnector
-from wolf_devsecops.core import aggregator as agg_mod
 from wolf_devsecops.core.aggregator import Aggregator
 from wolf_devsecops.core.cache import TTLCache
 from wolf_devsecops.core.config import AppConfig, ProjectConfig, SourceConfig, TrivyProjectConfig

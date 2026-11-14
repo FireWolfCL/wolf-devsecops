@@ -75,7 +75,7 @@ class FindingsSummary(BaseModel):  # desde DefectDojo (o WSS)
     accepted: SeverityCount = Field(default_factory=SeverityCount)
 
     @property
-    def counts_net(self) -> "SeverityCount":
+    def counts_net(self) -> SeverityCount:
         """Conteo NETO gobernado = crudo − aceptados, piso en 0 por severidad.
 
         Lo que puntúa la rúbrica (ADR-023). `counts` NUNCA se muta (wolf-genjutsu).
