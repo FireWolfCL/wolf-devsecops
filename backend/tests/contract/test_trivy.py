@@ -17,7 +17,7 @@ def _connector() -> TrivyConnector:
     data = json.loads((_FIX / "report.json").read_text(encoding="utf-8"))
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/reports/demo-app.json"
+        assert request.url.path == "/reports/wolf-cloud.json"
         return httpx.Response(200, json=data)
 
     return TrivyConnector(
@@ -29,9 +29,9 @@ def _connector() -> TrivyConnector:
 
 def _project() -> ProjectConfig:
     return ProjectConfig(
-        key="demo-app",
-        name="Demo App",
-        trivy=TrivyProjectConfig(report_path="reports/demo-app.json"),
+        key="wolf-cloud",
+        name="Wolf-Cloud",
+        trivy=TrivyProjectConfig(report_path="reports/wolf-cloud.json"),
     )
 
 

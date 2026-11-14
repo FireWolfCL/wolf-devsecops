@@ -248,6 +248,23 @@ class LDAPBindPasswordIn(BaseModel):
     password: str = Field(min_length=1, max_length=400)
 
 
+# ─── Reporte de avance programado (feature Pro) ───────────────────────────────
+class ScheduledReportIn(BaseModel):
+    """PUT /settings/scheduled-report — agenda del digest de avance."""
+
+    model_config = _STRICT
+
+    enabled: bool = False
+    every_days: int = Field(default=7, ge=1, le=90)
+
+
+class ScheduledReportOut(BaseModel):
+    enabled: bool
+    every_days: int
+    last_sent_at: str | None = None
+    available: bool  # la edición habilita FEATURE_REPORTS_SCHEDULED (si no, 402 al escribir)
+
+
 # ─── Licencia firmada por la web (E4) ─────────────────────────────────────────
 class LicenseIn(BaseModel):
     """PUT /settings/license — el token JWS firmado por la WLA, pegado tal cual (o el

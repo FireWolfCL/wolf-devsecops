@@ -8,7 +8,9 @@
 // revisión humana (principio ai-safety; Wolf no escribe tu código solo).
 import { useMemo, useState } from "react";
 
-import { fetchSourceDetail } from "../api/client";
+import { Link } from "react-router-dom";
+
+import { fetchExceptions, fetchSourceDetail } from "../api/client";
 import type { RemediationPick, TrivyFinding } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { useAsync, useMeta } from "../hooks";
@@ -140,6 +142,24 @@ export function FindingsDetail({
   );
   const triageOf = (id: string | null): string | null =>
     isContainers && id ? (triage?.[id.toUpperCase()] ?? null) : null;
+  // Contenedores: CVE ya aceptado como riesgo en Findings (DefectDojo/Sonar). Un
+  // aceptado sale de la lista de activos (6.3.a), así que no aparece en `triage`;
+  // lo cruzamos por CVE desde las excepciones aplicadas para marcar «✓ aceptado».
+  const { data: acceptedCves } = useAsync<Set<string>>(
+    () =>
+      isContainers
+        ? fetchExceptions({ project: projectKey, status: "applied" })
+            .then((r) => new Set(
+              (r.items ?? [])
+                .filter((e) => e.kind === "risk_accepted" && e.cve_id)
+                .map((e) => (e.cve_id as string).toUpperCase()),
+            ))
+            .catch(() => new Set<string>())
+        : Promise.resolve(new Set<string>()),
+    [projectKey, isContainers],
+  );
+  const isAccepted = (id: string | null): boolean =>
+    isContainers && !!id ? (acceptedCves?.has(id.toUpperCase()) ?? false) : false;
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [showPlan, setShowPlan] = useState(false);
@@ -156,8 +176,23 @@ export function FindingsDetail({
   const excSource = source === "defectdojo" || source === "sonarqube" ? source : null;
   const excFeature = meta?.features?.includes("exceptions.writeback") ?? false;
   const showExc = Boolean(excSource) && excFeature && canWrite;
-  const [excFor, setExcFor] = useState<{ ref: string; title?: string | null; category?: string | null } | null>(null);
+  const [excFor, setExcFor] = useState<{ ref: string; title?: string | null; category?: string | null; cve?: string | null; fixed?: string | null } | null>(null);
+  // Riesgos aceptados de este proyecto que YA tienen parche. Un hallazgo aceptado sale del
+  // drill-down activo (6.3.a), así que el aviso va como banner y no como badge por fila.
+  const patchableRes = useAsync(
+    () => (excSource ? fetchExceptions({ project: projectKey, status: "applied" }) : Promise.resolve({ items: [] })),
+    [excSource, projectKey],
+  );
+  const patchableN = (patchableRes.data?.items ?? []).filter((e) => e.kind === "risk_accepted" && e.patchable_since).length;
   const [excMsg, setExcMsg] = useState<string | null>(null);
+
+  // Salto a la tarjeta de Hallazgos (DefectDojo): la aceptación de riesgo vive ahí
+  // (Trivy no tiene estado «aceptado» donde escribir). Fija el hash para que su
+  // detalle se abra y hace scroll hasta la tarjeta.
+  const goToFindings = () => {
+    if (window.location.hash !== "#findings") window.location.hash = "findings";
+    document.getElementById("findings-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   if (loading) return <p className="muted findings-loading">{t("common.loading")}</p>;
   if (error) return <p className="muted">{error}</p>;
@@ -212,6 +247,12 @@ export function FindingsDetail({
       </div>
 
       {excMsg && <div className="alert ok sm" role="status">{excMsg}</div>}
+      {patchableN > 0 && (
+        <div className="alert warn sm patchable-banner" role="status">
+          {t("risks.patchableBanner", { n: patchableN })}{" "}
+          <Link to="/risks?f=patchable" className="btn sm primary">{t("risks.patchableGo")}</Link>
+        </div>
+      )}
       {excFor && excSource && (
         <ExceptionModal
           projectKey={projectKey}
@@ -310,7 +351,11 @@ export function FindingsDetail({
               </td>
               <td className="mono">
                 {f.id ?? "—"}
-                {(() => {
+                {isAccepted(f.id) ? (
+                  <span className="accepted-badge" title={t("exc.acceptedTip")}>
+                    {t("exc.acceptedBadge")}
+                  </span>
+                ) : (() => {
                   const st = triageOf(f.id);
                   return st ? (
                     <span className="triage-badge" title={t("findings.triage.tip", { state: t(`findings.triage.state.${st}`) })}>
@@ -323,12 +368,29 @@ export function FindingsDetail({
                 {f.pkg ? `${f.pkg} ${f.installed ?? ""}`.trim() : (f.target ?? "—")}
               </td>
               <td>{f.title || "—"}</td>
-              <td className="fix">{fixHint(f, t)}</td>
+              <td className="fix">
+                {fixHint(f, t)}
+                {/* Rastreado en DefectDojo: la aceptación de riesgo se hace en
+                    Hallazgos, no aquí (Trivy = exposición, solo lectura). Se ofrece
+                    aunque el CVE sea fixable: aceptar es alternativa a subir versión. */}
+                {isContainers && triageOf(f.id) && (
+                  <>
+                    {" "}
+                    <a
+                      href="#findings"
+                      className="accept-in-findings"
+                      onClick={(e) => { e.preventDefault(); goToFindings(); }}
+                    >
+                      {t("exc.inFindings")}
+                    </a>
+                  </>
+                )}
+              </td>
               {showExc && (
                 <td>
                   {f.ref ? (
                     <button type="button" className="btn sm"
-                            onClick={() => { setExcMsg(null); setExcFor({ ref: f.ref as string, title: f.title, category: f.category }); }}>
+                            onClick={() => { setExcMsg(null); setExcFor({ ref: f.ref as string, title: f.title, category: f.category, cve: f.cve, fixed: f.fixed }); }}>
                       {t("exc.col")}
                     </button>
                   ) : null}

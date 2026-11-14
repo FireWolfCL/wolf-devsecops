@@ -37,6 +37,8 @@ services:
       # Edición del producto: community (default) | pro | enterprise. Fase 1: por
       # entorno; fase 2 lo determinará la licencia firmada (WLA).
       WOLF_EDITION: ${WOLF_EDITION:-community}
+      WOLF_LICENSE: ${WOLF_LICENSE:-}
+      WOLF_LICENSE_REQUIRED: ${WOLF_LICENSE_REQUIRED:-false}
       WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
       DB_HOST: db
       DB_PORT: "5432"
@@ -86,6 +88,8 @@ services:
       disable: true   # no sirve /api/health; es un worker, no la API
     environment:
       WOLF_EDITION: ${WOLF_EDITION:-community}
+      WOLF_LICENSE: ${WOLF_LICENSE:-}
+      WOLF_LICENSE_REQUIRED: ${WOLF_LICENSE_REQUIRED:-false}
       WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
       WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:-}
       WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:-}
@@ -129,6 +133,8 @@ services:
       disable: true   # no sirve /api/health; es un worker, no la API
     environment:
       WOLF_EDITION: ${WOLF_EDITION:-community}
+      WOLF_LICENSE: ${WOLF_LICENSE:-}
+      WOLF_LICENSE_REQUIRED: ${WOLF_LICENSE_REQUIRED:-false}
       WOLF_DATABASE_URL: postgresql+asyncpg://wolf:${POSTGRES_PASSWORD:-wolf}@db:5432/wolf_devsecops
       WOLF_JWT_SECRET: ${WOLF_JWT_SECRET:-}
       WOLF_MFA_FERNET_KEY: ${WOLF_MFA_FERNET_KEY:-}

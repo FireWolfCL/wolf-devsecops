@@ -52,6 +52,9 @@ class _StubAgg:
     def connector_for(self, source):
         return {"defectdojo": self.dd, "sonarqube": self.sonar}.get(source)
 
+    async def invalidate_governance(self, project_key=None):  # overlay neto (ADR-023)
+        return None
+
 
 @pytest.fixture
 async def session(tmp_path):

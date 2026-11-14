@@ -25,6 +25,7 @@ from ..services import (
     exceptions_service,
     notification_service,
     posture_history_service,
+    scheduled_report_service,
 )
 from ..settings import get_settings
 
@@ -35,6 +36,15 @@ async def _cycle() -> tuple[int, dict]:
     settings = get_settings()
     sm = get_sessionmaker()
     async with sm() as session:
+        # Honra una licencia cargada por el panel (precedencia BD>env) sin reiniciar
+        # el servicio: si suben a Pro, el próximo ciclo ya captura.
+        await config_service.resolve_license_into_settings(session)
+        # El snapshot periódico AUTOMÁTICO es feature Pro (FEATURE_SCHEDULER). En
+        # Community el bucle NO captura: usa `wolf-devsecops snapshot-posture` manual
+        # o un cron externo. Las novedades externas y la purga de auditoría ya tienen
+        # su propio gate más abajo; esto cierra la automatización en sí.
+        if not edition.is_enabled(edition.FEATURE_SCHEDULER):
+            return 0, {"skipped": "scheduler_pro", "edition": edition.current_edition()}
         config = await config_service.assemble_app_config(session)
         aggregator = Aggregator(config, TTLCache(settings.cache_ttl_seconds))
         written, _skipped = await posture_history_service.capture_snapshots(
@@ -42,12 +52,19 @@ async def _cycle() -> tuple[int, dict]:
         )
         # Vence las aceptaciones de riesgo (ADR-021): revierte en la fuente + alerta.
         expired = await exceptions_service.expire_due(session, aggregator)
+        # Riesgos aceptados sin parche que YA tienen FixedVersion → evento + aviso (ADR-021).
+        patchable = await exceptions_service.check_patchable(session, aggregator)
     async with sm() as session:
         disp = await notification_service.dispatch_pending(session, settings)
     disp["exceptions_expired"] = expired
+    disp["exceptions_patchable"] = patchable
     async with sm() as session:
         rem = await notification_service.check_token_expiry(session, settings)
     disp["token_reminders"] = rem.get("reminded", 0)
+    # Reporte de avance programado (feature Pro): envía el digest si toca por cadencia.
+    async with sm() as session:
+        srep = await scheduled_report_service.maybe_send(session, settings)
+    disp["scheduled_report_sent"] = srep.get("sent", False)
     # Retención de auditoría (feature Pro): purga lo más viejo si la edición lo permite.
     if edition.is_enabled(edition.FEATURE_AUDIT_EXPORT) and settings.audit_retention_days > 0:
         async with sm() as session:
@@ -69,10 +86,17 @@ def scheduler(
             while True:
                 try:
                     written, disp = await _cycle()
-                    log.info(
-                        "ciclo OK — snapshots=%s, novedades enviadas=%s (%s)",
-                        written, disp.get("sent", 0), ",".join(disp.get("channels", [])) or "sin canales",
-                    )
+                    if disp.get("skipped") == "scheduler_pro":
+                        log.info(
+                            "ciclo omitido — el snapshot automático es feature Pro (edición: %s). "
+                            "Usa `snapshot-posture` manual o un cron externo.",
+                            disp.get("edition"),
+                        )
+                    else:
+                        log.info(
+                            "ciclo OK — snapshots=%s, novedades enviadas=%s (%s)",
+                            written, disp.get("sent", 0), ",".join(disp.get("channels", [])) or "sin canales",
+                        )
                 except Exception as exc:  # noqa: BLE001 — un ciclo roto no mata el bucle
                     log.warning("ciclo con error: %s", exc)
                 if once:

@@ -32,9 +32,9 @@ def _connector() -> WSSConnector:
 
 def _project() -> ProjectConfig:
     return ProjectConfig(
-        key="demo-app",
-        name="Demo App",
-        wss=WSSProjectConfig(product="Demo App"),
+        key="wolf-cloud",
+        name="Wolf-Cloud",
+        wss=WSSProjectConfig(product="Wolf-Cloud"),
     )
 
 

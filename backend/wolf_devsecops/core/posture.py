@@ -25,6 +25,13 @@ from ..models import (
 
 RUBRIC_VERSION = "1.0"
 
+# Checks que SÍ son conscientes de la rama y por tanto comparables entre refs (ADR-024).
+# `ci-green` lo es "gratis": GitHub Actions filtra runs por `?branch=<ref>`. El resto
+# de fuentes (DefectDojo/Trivy/Harbor, y SonarQube Community sin branch plugin) reflejan
+# el último escaneo importado, no el ref → incluirlas en una comparación sería deshonesto.
+# El MVP arranca solo con ci-green; se amplía cuando una fuente gane conciencia de rama.
+BRANCH_COMPARABLE_CHECKS = frozenset({"ci-green"})
+
 
 @dataclass(frozen=True)
 class PostureConfig:
@@ -94,7 +101,14 @@ def _c_count_zero(s: SourceResult, attr: str) -> _Outcome:
     e = _eligible(s)
     if not e.ok:
         return _na(e)
-    return _verdict(e, getattr(s.data.counts, attr) == 0)
+    # Neto gobernado: los CVE con riesgo aceptado (applied) no penalizan (ADR-023).
+    # El crudo (`counts`) se conserva para panel/PDF; aquí puntúa `counts_net`.
+    raw = getattr(s.data.counts, attr)
+    net = getattr(s.data.counts_net, attr)
+    out = _verdict(e, net == 0)
+    if out.result == "pass" and raw > 0:  # pasó solo gracias a la aceptación: transparencia
+        return _Outcome("pass", 1.0, "accepted_risk", e.stale, e.degraded)
+    return out
 
 
 def _c_findings_cve(summary: ProjectSummary, attr: str) -> _Outcome:
@@ -113,9 +127,11 @@ def _c_findings_cve(summary: ProjectSummary, attr: str) -> _Outcome:
     if not ef.ok:
         return _na(ef)
     ec = _eligible(summary.containers)
-    f = getattr(summary.findings.data.counts, attr)
+    # Reconciliación sobre el NETO en ambos lados (ADR-023): en Hallazgos neto==crudo
+    # (el write-back de DD ya restó los aceptados); en Contenedores neto==crudo−aceptados.
+    f = getattr(summary.findings.data.counts_net, attr)
     if ec.ok:
-        c = getattr(summary.containers.data.counts, attr)
+        c = getattr(summary.containers.data.counts_net, attr)
         if f <= c:  # todo lo de esta severidad ya lo representa Contenedores
             return _Outcome("na", 0.0, "covered_by_containers", ef.stale, ef.degraded)
         return _verdict(ef, False)  # exceso de hallazgos de app por encima de los CVEs
@@ -174,15 +190,23 @@ class _Raw:
 
 
 def _critical_open(summary: ProjectSummary) -> bool:
-    """Crítico abierto en una fuente elegible de hallazgos o de contenedores."""
+    """Crítico abierto (NETO) en una fuente elegible de hallazgos o de contenedores.
+
+    Un crítico con riesgo aceptado aprobado no cuenta como abierto (ADR-023): no capa
+    la banda a `en_riesgo`. Uno no aceptado (o aceptación vencida/fallida) sí.
+    """
     for block in (summary.findings, summary.containers):
         e = _eligible(block)
-        if e.ok and block.data.counts.critical >= 1:
+        if e.ok and block.data.counts_net.critical >= 1:
             return True
     return False
 
 
-def _evaluate(summary: ProjectSummary, cfg: PostureConfig) -> _Raw:
+def _evaluate(
+    summary: ProjectSummary,
+    cfg: PostureConfig,
+    only_checks: frozenset[str] | None = None,
+) -> _Raw:
     # (id, peso, outcome) en el orden de la rúbrica.
     specs: list[tuple[str, int, _Outcome]] = [
         ("ci-green", 10, _c_ci(summary.ci)),
@@ -201,6 +225,11 @@ def _evaluate(summary: ProjectSummary, cfg: PostureConfig) -> _Raw:
     stale = False
     degraded = False
     for cid, weight, o in specs:
+        # Comparación por rama (ADR-024): los checks fuera de la whitelist se fuerzan a
+        # `na` para que NO entren al denominador — un delta de score entre ramas solo
+        # puede apoyarse en lo que de verdad varía por rama. El score sigue puro.
+        if only_checks is not None and cid not in only_checks:
+            o = _Outcome("na", 0.0, "not_branch_comparable", False, False)
         earned = weight * o.frac
         checks.append(
             CheckResult(id=cid, result=o.result, weight=weight, earned=earned, reason_code=o.reason)
@@ -234,8 +263,19 @@ def _band(score: int, coverage: int, critical_open: bool) -> tuple[str, str | No
 
 
 # ─── API pública ──────────────────────────────────────────────────────────────
-def score_project(summary: ProjectSummary, cfg: PostureConfig = _DEFAULT_CFG) -> PostureScore:
-    r = _evaluate(summary, cfg)
+def score_project(
+    summary: ProjectSummary,
+    cfg: PostureConfig = _DEFAULT_CFG,
+    *,
+    only_checks: frozenset[str] | None = None,
+) -> PostureScore:
+    """% de cumplimiento de un proyecto (al vuelo, ADR-012).
+
+    `only_checks` (ADR-024): si se da, SOLO esos checks puntúan; el resto queda `na`
+    (`not_branch_comparable`). Lo usa la comparación entre ramas para un delta justo.
+    Omitirlo = comportamiento normal (toda la rúbrica), sin cambio para el panel.
+    """
+    r = _evaluate(summary, cfg, only_checks)
     if r.peso_e == 0:
         return PostureScore(
             rubric_version=RUBRIC_VERSION, score=None, coverage=0, band="sin_datos",

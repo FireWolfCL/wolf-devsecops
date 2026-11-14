@@ -9,8 +9,8 @@ from wolf_devsecops.core.config import load_config
 def test_writer_roundtrip(tmp_path):
     sources = {"github": {"url": "https://api.github.com", "token_env": "GITHUB_TOKEN"}}
     projects = [
-        {"key": "example-app", "name": "Example App",
-         "github": {"repo": "my-org/example-app", "ci_workflow": "ci.yml"}}
+        {"key": "wolf-cloud", "name": "Wolf-Cloud",
+         "github": {"repo": "FireWolfCL/Wolf-Cloud", "ci_workflow": "ci.yml"}}
     ]
     config = build_config_dict(sources, projects)
     out = tmp_path / "projects.yaml"
@@ -19,7 +19,7 @@ def test_writer_roundtrip(tmp_path):
     loaded = load_config(out)
     assert loaded.sources["github"].url == "https://api.github.com"
     assert loaded.sources["github"].token_env == "GITHUB_TOKEN"
-    assert loaded.project("example-app").github.repo == "my-org/example-app"
+    assert loaded.project("wolf-cloud").github.repo == "FireWolfCL/Wolf-Cloud"
 
 
 def test_writer_rechaza_token_literal():

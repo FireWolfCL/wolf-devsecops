@@ -9,7 +9,7 @@
 Este roadmap describe cómo crece Wolf DevSecOps. Es una **guía de dirección, no
 un compromiso de fechas**: el orden puede ajustarse según prioridades. Cada
 horizonte es aditivo — construido sobre los seams de extensión definidos en
-el propio código, de modo que crecer **no exige rediseñar**.
+`docs/ARCHITECTURE.md` (§8), de modo que crecer **no exige rediseñar**.
 
 > **Principio rector:** la herramienta debe poder sumar fuentes, proveedores de
 > IA y canales nuevos añadiendo *una clase + su registro*, sin tocar el core.
@@ -106,7 +106,7 @@ nuevo).
 
 ## Cómo crecer (para quien contribuya)
 
-Añadir una integración es siempre el mismo patrón:
+Añadir una integración es siempre el mismo patrón (`docs/ARCHITECTURE.md` §8):
 
 1. Implementa la interfaz en su `base.py` (`Connector`, `AIProvider` o
    `NotificationChannel`).

@@ -403,6 +403,15 @@ async def _after_write(session: AsyncSession) -> None:
     reset_aggregator()
 
 
+async def _get_source_row(session: AsyncSession, name: str) -> SourceConfigRow | None:
+    """Fila de `source_config` por nombre. Desde ADR-022 F0 el PK es un uuid surrogate (el
+    nombre es único por tenant), así que `session.get(…, name)` ya no sirve. Sin scoping
+    por tenant aquí (F1): con un solo tenant el nombre identifica una única fila."""
+    return (
+        await session.execute(select(SourceConfigRow).where(SourceConfigRow.name == name))
+    ).scalars().first()
+
+
 async def upsert_source(
     session: AsyncSession,
     name: str,
@@ -419,7 +428,7 @@ async def upsert_source(
     if env_name is None:
         raise ConfigWriteError("token_env es obligatorio (nombre de variable de entorno)")
     url = _validate_url(url)
-    row = await session.get(SourceConfigRow, name)
+    row = await _get_source_row(session, name)
     if row is None:
         row = SourceConfigRow(name=name, url=url, token_env=env_name, enabled=enabled,
                               updated_by=updated_by)
@@ -456,7 +465,7 @@ async def set_source_token(
     token toma efecto en el próximo request sin reiniciar el proceso."""
     from ..auth.security import encrypt_source_token
 
-    row = await session.get(SourceConfigRow, name)
+    row = await _get_source_row(session, name)
     if row is None:
         raise ConfigWriteError(f"Fuente no configurada: {name}")
     token = (token_plain or "").strip()
@@ -475,7 +484,7 @@ async def clear_source_token(
 ) -> SourceConfigRow | None:
     """Borra el token cifrado de una fuente: vuelve a resolver desde la env var.
     También limpia la expiración (era del token recién borrado). None si no existe."""
-    row = await session.get(SourceConfigRow, name)
+    row = await _get_source_row(session, name)
     if row is None:
         return None
     row.token_cipher = None
@@ -493,7 +502,7 @@ async def record_source_token_expiry(
     """Persiste la expiración del token de una fuente (capturada del proveedor, p. ej.
     la cabecera `github-authentication-token-expiration`). No-op si la fuente no existe o
     si la fecha no cambió. Reensambla la config para que el panel vea la fecha al vuelo."""
-    row = await session.get(SourceConfigRow, name)
+    row = await _get_source_row(session, name)
     if row is None or row.token_expires_at == expires_at:
         return
     row.token_expires_at = expires_at

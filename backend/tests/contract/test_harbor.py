@@ -30,8 +30,8 @@ def _connector() -> HarborConnector:
 
 def _project() -> ProjectConfig:
     return ProjectConfig(
-        key="demo-app",
-        name="Demo App",
+        key="wolf-cloud",
+        name="Wolf-Cloud",
         harbor=HarborProjectConfig(project="library", repository="app"),
     )
 

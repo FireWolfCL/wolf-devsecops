@@ -118,9 +118,12 @@ export function SeverityBar({
   counts,
   empty,
   compact = false,
+  accepted,
 }: {
   title: string;
   counts: SeverityCount | null;
+  /** ADR-023: aceptados dentro de `counts`; muestra exposición/aceptados/neto (crítico y alto). */
+  accepted?: SeverityCount | null;
   /** Se muestra cuando no hay dato (fuente no conectada / sin datos). */
   empty: ReactNode;
   compact?: boolean;
@@ -166,6 +169,19 @@ export function SeverityBar({
           </span>
         ))}
       </div>
+      {accepted &&
+        (["critical", "high"] as const)
+          .filter((k) => accepted[k] > 0)
+          .map((k) => (
+            <div key={k} className="sevbar-net mono" title={t("exc.netTip")} style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
+              {t("exc.netLine", {
+                sev: t(`sevbar.${k}.l`),
+                exp: counts[k],
+                acc: accepted[k],
+                net: Math.max(0, counts[k] - accepted[k]),
+              })}
+            </div>
+          ))}
     </div>
   );
 }

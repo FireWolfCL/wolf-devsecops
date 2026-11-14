@@ -17,7 +17,7 @@ from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from ._shared import new_uuid
+from ._shared import new_uuid, tenant_id_column
 
 # kind: false_positive | risk_accepted | out_of_scope | mitigated
 # status: proposed | applied | revoked | expired
@@ -27,6 +27,7 @@ class SourceException(Base):
     __tablename__ = "source_exceptions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    tenant_id: Mapped[str] = tenant_id_column()
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )
@@ -37,7 +38,7 @@ class SourceException(Base):
     category: Mapped[str | None] = mapped_column(String(20), nullable=True)  # secrets|sca|... (6.3.d)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     justification: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(10), nullable=False, default="proposed", index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed", index=True)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_by_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -45,3 +46,9 @@ class SourceException(Base):
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    # Seguimiento de parche (0012): si el hallazgo es un CVE, se rastrea hasta que Trivy
+    # publique `FixedVersion`. cve_id NULL = no rastreable (no-op honesto). fixed_version
+    # NULL = aceptado sin parche; al aparecer se fija junto a patchable_since (y se avisa 1 vez).
+    cve_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    fixed_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    patchable_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

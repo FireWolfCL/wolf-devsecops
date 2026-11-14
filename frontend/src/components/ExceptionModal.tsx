@@ -14,7 +14,7 @@ export function ExceptionModal({
 }: {
   projectKey: string;
   source: "defectdojo" | "sonarqube";
-  finding: { ref: string; title?: string | null; category?: string | null };
+  finding: { ref: string; title?: string | null; category?: string | null; cve?: string | null; fixed?: string | null };
   onClose: () => void;
   onDone: (msg: string) => void;
 }) {
@@ -44,6 +44,12 @@ export function ExceptionModal({
         finding_title: finding.title ?? null,
         category: finding.category ?? null,
         expires_days: kind === "risk_accepted" ? expiresDays : null,
+        // Seguimiento de parche (solo riesgo aceptado): sin CVE el servidor intenta derivarlo
+        // del título; sin CVE no se rastrea. fixed null = "aceptado sin parche".
+        // `|| null`: un CVE vacío ("") debe ir como null (el `??` lo dejaba "" y el
+        // patrón CVE del backend lo rechazaba con 422). Sin CVE el servidor lo deriva del título.
+        cve_id: kind === "risk_accepted" ? (finding.cve || null) : null,
+        fixed_version: kind === "risk_accepted" ? (finding.fixed || null) : null,
       });
       onDone(willPropose ? t("exc.proposed") : t("exc.applied"));
       onClose();

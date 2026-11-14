@@ -32,9 +32,9 @@ def _connector() -> SonarQubeConnector:
 
 def _project() -> ProjectConfig:
     return ProjectConfig(
-        key="demo-app",
-        name="Demo App",
-        sonarqube=SonarProjectConfig(project_key="demo-app"),
+        key="wolf-cloud",
+        name="Wolf-Cloud",
+        sonarqube=SonarProjectConfig(project_key="wolf-cloud"),
     )
 
 

@@ -16,10 +16,10 @@ SCAN_NET="${SCAN_NET:-wolf-devsecops_default}"
 # Trivy fs NO respeta .gitignore: sin esto escanea caches/artefactos/volúmenes de
 # datos (p. ej. .pytest_cache con fixtures dummy de tests de secretos, o la llave
 # que Harbor se autogenera en su volumen) y los reporta como "secretos" críticos.
-TRIVY_SKIP='**/.pytest_cache,**/node_modules,**/.venv,**/venv,**/__pycache__,**/dist,**/build,**/.git,**/coverage,**/harbor/harbor,**/defectdojo/media,**/.mypy_cache,**/.ruff_cache'
+TRIVY_SKIP='**/.pytest_cache,**/node_modules,**/.venv*,**/venv,**/site-packages,**/__pycache__,**/dist,**/build,**/.git,**/coverage,**/harbor/harbor,**/defectdojo/media,**/.mypy_cache,**/.ruff_cache,**/*.egg-info'
 
 # Exclusiones del sonar-scanner (dependencias/artefactos).
-SONAR_EXCLUSIONS='**/node_modules/**,**/dist/**,**/build/**,**/.venv/**,**/venv/**,**/__pycache__/**,**/*.min.js,**/migrations/**,**/vendor/**,**/.git/**,**/coverage/**,**/target/**'
+SONAR_EXCLUSIONS='**/node_modules/**,**/dist/**,**/build/**,**/.venv*/**,**/venv/**,**/site-packages/**,**/__pycache__/**,**/*.min.js,**/migrations/**,**/vendor/**,**/.git/**,**/coverage/**,**/target/**'
 
 # slug <texto> → minúsculas [a-z0-9-] (basename, sin .git).
 scan_slug() {

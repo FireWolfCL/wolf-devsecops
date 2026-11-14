@@ -8,6 +8,7 @@ import { useT } from "../i18n";
 const ADMIN_TABS = [
   { to: "/admin/users", label: "admin.tab.users" },
   { to: "/admin/integraciones", label: "admin.tab.integrations" },
+  { to: "/admin/sso", label: "admin.tab.sso" },
   { to: "/admin/settings", label: "admin.tab.settings" },
   { to: "/admin/license", label: "admin.tab.license" },
   { to: "/admin/ai", label: "admin.tab.ai" },

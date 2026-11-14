@@ -38,12 +38,14 @@ from ..schemas_admin import (
     LicenseOut,
     ProjectIn,
     ProjectOut,
+    ScheduledReportIn,
+    ScheduledReportOut,
     SourceIn,
     SourceOut,
     SourceTokenIn,
     SourceTokenStatusOut,
 )
-from ..services import audit_service, config_service
+from ..services import audit_service, config_service, scheduled_report_service
 from ..settings import get_settings
 
 # Umbral del aviso "vence pronto" (item 6). El envío de la notificación es del scheduler.
@@ -508,3 +510,24 @@ async def clear_ldap_bind_password(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "El directorio LDAP no está configurado.")
     await _audit(db, admin, "config.ldap_bind_password_set", "ldap", "ldap", {"present": False})
     return _ldap_out(row, sso_available=True)
+
+
+# ─── Reporte de avance programado (feature Pro) ───────────────────────────────
+_require_reports = Depends(edition.require_feature(edition.FEATURE_REPORTS_SCHEDULED))
+
+
+@router.get("/scheduled-report", response_model=ScheduledReportOut)
+async def get_scheduled_report(db: AsyncSession = Depends(get_db)) -> ScheduledReportOut:
+    return ScheduledReportOut(**await scheduled_report_service.get_config(db))
+
+
+@router.put("/scheduled-report", response_model=ScheduledReportOut, dependencies=[_require_reports])
+async def put_scheduled_report(
+    payload: ScheduledReportIn, admin: User = _admin, db: AsyncSession = Depends(get_db)
+) -> ScheduledReportOut:
+    cfg = await scheduled_report_service.set_config(
+        db, enabled=payload.enabled, every_days=payload.every_days
+    )
+    await _audit(db, admin, "config.scheduled_report_updated", "scheduled_report",
+                 "scheduled_report", {"enabled": payload.enabled, "every_days": payload.every_days})
+    return ScheduledReportOut(**cfg)

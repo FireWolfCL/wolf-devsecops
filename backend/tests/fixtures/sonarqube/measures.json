@@ -1,6 +1,6 @@
 {
   "component": {
-    "key": "demo-app",
+    "key": "wolf-cloud",
     "measures": [
       { "metric": "bugs", "value": "3" },
       { "metric": "vulnerabilities", "value": "1" },

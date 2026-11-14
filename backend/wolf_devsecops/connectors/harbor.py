@@ -12,11 +12,12 @@ Cubre el hueco de "contenedor ya construido": CVEs por imagen, estado de escaneo
 from __future__ import annotations
 
 import urllib.parse
+from datetime import datetime
 
 import httpx
 
 from ..core.config import ProjectConfig
-from ..models import FindingsSummary, ProbeResult, SeverityCount, SourceDetail
+from ..models import FindingsSummary, ProbeResult, RegistryImage, SeverityCount, SourceDetail
 from .base import Connector, ConnectorUnavailable
 
 # Harbor reporta severidades capitalizadas; Unknown lo tratamos como info.
@@ -141,6 +142,38 @@ class HarborConnector(Connector):
             "artifacts_scanned": scanned,
             "harbor_project": hp.project,
         }
+
+    async def image_presence(self, project: ProjectConfig) -> RegistryImage:
+        """¿Hay alguna imagen publicada? (solo lectura). Cuenta artefactos, estén o no
+        escaneados; devuelve el tag/fecha del push más reciente."""
+        hp = project.harbor
+        if hp is None:
+            raise ConnectorUnavailable("El proyecto no define bloque 'harbor'.")
+        count = 0
+        best: tuple[datetime, str | None] | None = None
+        async with self._client() as client:
+            repos = (
+                [hp.repository] if hp.repository
+                else await self._list_repositories(client, hp.project)
+            )
+            for repo in repos:
+                for artifact in await self._artifacts(client, hp.project, repo):
+                    count += 1
+                    raw = artifact.get("push_time")
+                    try:
+                        when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                    except ValueError:
+                        continue
+                    if best is None or when > best[0]:
+                        tags = artifact.get("tags") or []
+                        tag = tags[0].get("name") if tags and isinstance(tags[0], dict) else None
+                        best = (when, tag)
+        return RegistryImage(
+            present=count > 0,
+            tag=best[1] if best else None,
+            pushed_at=best[0] if best else None,
+            artifacts=count,
+        )
 
     async def fetch_summary(self, project: ProjectConfig) -> FindingsSummary:
         data = await self._scan_data(project)

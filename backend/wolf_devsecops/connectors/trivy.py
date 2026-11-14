@@ -248,6 +248,59 @@ class TrivyConnector(Connector):
         out = sorted(merged.values(), key=lambda x: (not x["vulnerable"], x["name"], x["version"] or ""))
         return out[: cls._MAX_PACKAGES], degraded
 
+    @staticmethod
+    def _cve_fixes_from_report(report: dict) -> dict[str, str | None]:
+        """CVE (MAYÚSCULAS) → versión fija (None = aún sin parche), sobre el reporte
+        COMPLETO (sin tope de lista ni supresiones: una excepción no debe ocultar su parche).
+        Un CVE con varios paquetes: basta que uno publique FixedVersion."""
+        out: dict[str, str | None] = {}
+        for r in report.get("Results") or []:
+            if not isinstance(r, dict):
+                continue
+            for v in r.get("Vulnerabilities") or []:
+                if not isinstance(v, dict) or not v.get("VulnerabilityID"):
+                    continue
+                cid = str(v["VulnerabilityID"]).upper()
+                fixed = (str(v.get("FixedVersion") or "").strip() or None)
+                if out.get(cid) is None:
+                    out[cid] = fixed
+        return out
+
+    async def cve_fixes(self, project: ProjectConfig) -> dict[str, str | None]:
+        return self._cve_fixes_from_report(await self._report(project))
+
+    @classmethod
+    def _cve_severities_from_report(
+        cls, report: dict, ignored: set[str] | None = None
+    ) -> dict[str, str]:
+        """CVE (MAYÚSCULAS) → severidad normalizada ("critical".."info"), para cruzar
+        con las aceptaciones de riesgo y restar del neto gobernado (ADR-023).
+
+        Se construye DESPUÉS de aplicar `ignored` (6.3.c) para no restar dos veces un
+        CVE ya suprimido por archivo. Si un CVE aparece con varias severidades, se
+        conserva la MÁS alta (coherente con cómo lo vería el operador).
+        """
+        ignored = ignored or set()
+        out: dict[str, str] = {}
+        for r in report.get("Results") or []:
+            if not isinstance(r, dict):
+                continue
+            for v in r.get("Vulnerabilities") or []:
+                if not isinstance(v, dict) or not v.get("VulnerabilityID"):
+                    continue
+                cid = str(v["VulnerabilityID"]).upper()
+                if cid in ignored:
+                    continue
+                norm = _TRIVY_SEV.get(str(v.get("Severity", "")).upper(), "info")
+                prev = out.get(cid)
+                if prev is None or cls._SEV_RANK.get(norm.upper(), 5) < cls._SEV_RANK.get(prev.upper(), 5):
+                    out[cid] = norm
+        return out
+
+    async def cve_severities(self, project: ProjectConfig) -> dict[str, str]:
+        report = await self._report(project)
+        return self._cve_severities_from_report(report, self._ignored(project))
+
     async def inventory(self, project: ProjectConfig) -> tuple[list[dict], bool]:
         return self._inventory_from_report(await self._report(project))
 

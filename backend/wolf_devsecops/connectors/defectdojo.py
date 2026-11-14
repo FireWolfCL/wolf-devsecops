@@ -10,6 +10,7 @@ from __future__ import annotations
 import httpx
 
 from ..core.config import ProjectConfig
+from ..core.cve import extract_cve
 from ..models import FindingsSummary, ProbeResult, SeverityCount, SourceDetail
 from .base import Connector, ConnectorUnavailable
 
@@ -212,6 +213,10 @@ class DefectDojoConnector(Connector):
                 "status": _finding_status(f),  # gestión en DefectDojo → 'en triage' (2.3)
                 "ref": str(f["id"]) if f.get("id") is not None else None,  # id DB para escritura (ADR-021)
                 "id": f.get("cve") or f.get("vuln_id_from_tool") or None,
+                # CVE canónico para el seguimiento de parche de riesgos aceptados (ADR-021).
+                # Orden: campo `cve` → `vulnerability_ids` → id de la herramienta → título.
+                "cve": extract_cve(f.get("cve"), f.get("vulnerability_ids"),
+                                   f.get("vuln_id_from_tool"), f.get("title")),
                 "pkg": pkg,
                 "installed": ver,
                 "fixed": None,  # DefectDojo no publica versión fija de forma fiable

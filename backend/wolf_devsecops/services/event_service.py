@@ -33,6 +33,10 @@ _COMPLIANCE_DELTA = 5.0  # pp mínimos para un evento de % (sin cambio de banda)
 GOOD_KINDS = {"improved", "resolved_critical", "resolved_high"}
 BAD_KINDS = {"worsened", "new_critical", "new_high", "ci_failed", "gate_error",
              "exception_expired", "exception_expire_failed"}
+# Accionable-positivo: un riesgo aceptado "sin parche" YA tiene parche → hay que remediar.
+# No es mejora ni retroceso de postura (no entra en GOOD/BAD); severidad `warn` para que
+# supere cualquier umbral de notify_min_severity razonable (good/warn) sin gritar como danger.
+ACTION_KINDS = {"exception_patchable"}
 
 
 def _ev(
@@ -111,8 +115,16 @@ async def list_events(session: AsyncSession, limit: int = 50) -> list[ProjectEve
     return list((await session.execute(q)).scalars())
 
 
+async def _get_marker(session: AsyncSession, user_id: str) -> EventRead | None:
+    """Marcador de lectura del usuario. Desde ADR-022 F0 el PK es (tenant_id, user_id), así
+    que `session.get(…, user_id)` ya no sirve; user_id es uuid, único entre tenants."""
+    return (
+        await session.execute(select(EventRead).where(EventRead.user_id == user_id))
+    ).scalars().first()
+
+
 async def unread_count(session: AsyncSession, user_id: str) -> int:
-    marker = await session.get(EventRead, user_id)
+    marker = await _get_marker(session, user_id)
     q = select(func.count(ProjectEvent.id))
     if marker is not None:
         q = q.where(ProjectEvent.created_at > marker.last_read_at)
@@ -120,7 +132,7 @@ async def unread_count(session: AsyncSession, user_id: str) -> int:
 
 
 async def mark_read(session: AsyncSession, user_id: str) -> None:
-    marker = await session.get(EventRead, user_id)
+    marker = await _get_marker(session, user_id)
     now = datetime.now(UTC)
     if marker is None:
         session.add(EventRead(user_id=user_id, last_read_at=now))

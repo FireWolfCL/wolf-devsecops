@@ -25,6 +25,8 @@ export interface CISummary {
 export interface FindingsSummary {
   counts: SeverityCount;
   total_active: number;
+  /** ADR-023: CVE de contenedor con riesgo aceptado que siguen en `counts`. neto = max(0, counts − accepted). */
+  accepted?: SeverityCount;
   /** Conteo de activos por tipo de escaneo (6.2): secrets, sast, sca, container, iac, dast, other. */
   categories?: Record<string, number>;
   url: string | null;
@@ -52,6 +54,24 @@ export interface SourceResult<T> {
   data: T | null;
   error: string | null;
   fetched_at: string | null;
+}
+
+/** Procedencia read-only del forge: último commit de `main` + autor (ADR-001). */
+export interface ProvenanceInfo {
+  default_branch: string | null;
+  sha_short: string | null;
+  message: string | null;
+  author: string | null; // null = desconocido (jamás se inventa)
+  author_is_login: boolean; // true solo si `author` es una cuenta del forge
+  authored_at: string | null;
+  html_url: string | null;
+  source: "github" | "gitlab" | null;
+}
+
+/** Sello de frescura: hora del dato más viejo mostrado (no generated_at). */
+export interface FreshnessStamp {
+  as_of: string | null;
+  stale: boolean;
 }
 
 // ─── Postura / % de cumplimiento (docs/POSTURE-RUBRIC.md) ───────────────────
@@ -113,6 +133,10 @@ export interface ProjectSummary {
   release: SourceResult<ReleaseSummary>;
   /** CVEs de imagen/filesystem (Harbor + Trivy fusionados). */
   containers: SourceResult<FindingsSummary>;
+  /** Procedencia del forge: último commit de `main` + autor (independiente de CI). */
+  provenance: SourceResult<ProvenanceInfo> | null;
+  /** Sello de frescura: hora del dato más viejo mostrado. */
+  freshness: FreshnessStamp | null;
   posture: PostureScore | null;
   /** Deep-links de salida hacia cada herramienta (URL pública navegable). */
   links: Record<string, string>;
@@ -126,6 +150,8 @@ export interface ProjectListItem {
   ci_status: CIStatus | null;
   findings: SeverityCount | null;
   container_findings: SeverityCount | null;
+  /** ADR-023: aceptados dentro de container_findings (null/ausente = sin dato). */
+  container_accepted?: SeverityCount | null;
   quality_gate: string | null;
   worst_source_status: SourceStatus;
   posture_score: number | null;
@@ -206,6 +232,8 @@ export interface TrivyFinding {
   target: string | null;
   /** Evidencia de código (issues de Sonar): líneas ±N de la señalada. Texto plano. */
   evidence?: { line: number; code: string }[];
+  /** CVE canónico (DefectDojo) para el seguimiento de parche de riesgos aceptados. */
+  cve?: string | null;
 }
 
 // ─── Reviewer IA (F6, ADR-007) ──────────────────────────────────────────────
@@ -357,6 +385,35 @@ export interface LicenseStatus {
   expires_at?: string | null;
   days_left?: number | null;
   error?: string | null; // invalid_signature | expired | wrong_product
+}
+
+/** GET /settings/ldap: config de SSO/LDAP (E2). El bind password es write-only
+ *  (solo `bind_password_present`); el valor nunca viaja de vuelta. */
+export interface LDAPConfigOut {
+  enabled: boolean;
+  hosts: string[];
+  base_dn: string;
+  use_ssl: boolean;
+  start_tls: boolean;
+  tls_verify: "required" | "relaxed";
+  tls_ca_pem: string | null;
+  user_dn_template: string | null;
+  user_filter: string;
+  bind_dn: string | null;
+  bind_password_env: string | null;
+  bind_password_present: boolean; // hay un bind password cifrado en BD (nunca el valor)
+  timeout_seconds: number;
+  sso_available: boolean; // la edición habilita FEATURE_SSO; si no, 402 al escribir
+}
+/** PUT /settings/ldap: cuerpo (sin el bind password ni los campos de solo-lectura). */
+export type LDAPConfigIn = Omit<LDAPConfigOut, "bind_password_present" | "sso_available">;
+
+/** GET/PUT /settings/scheduled-report: agenda del digest de avance (feature Pro). */
+export interface ScheduledReportConfig {
+  enabled: boolean;
+  every_days: number;
+  last_sent_at: string | null;
+  available: boolean; // la edición habilita FEATURE_REPORTS_SCHEDULED
 }
 
 /** GET /settings/available-sources: catálogo (configurada o no). */
@@ -517,6 +574,28 @@ export interface PostureHistory {
   snapshots: PostureSnapshot[];
 }
 
+// ─── Comparación de postura entre ramas (ADR-024) ───────────────────────────
+// Espejo 1:1 de RefPosture / PostureComparison (backend models.py). MVP: solo el
+// check ci-green es consciente de rama; el resto queda `na` (not_branch_comparable).
+export interface RefPosture {
+  ref: string; // nombre de la rama tal como se pidió
+  ci_branch: string | null; // rama que GitHub reporta (honestidad: confirma el ref)
+  posture: PostureScore; // score calculado SOLO con los checks comparables
+  delta_vs_baseline: number | null; // score − score(baseline); null si alguno es sin_datos
+  new_fails: string[]; // checks que fallan aquí y no fallaban en el baseline
+  resolved_fails: string[]; // checks que pasan aquí y fallaban en el baseline
+}
+
+export interface PostureComparison {
+  project_key: string;
+  baseline: string; // ref contra el que se miden los deltas
+  comparable_checks: string[]; // checks efectivamente comparados (el resto queda `na`)
+  refs: RefPosture[]; // un bloque por ref pedido, en el orden pedido
+  ranking: string[]; // refs de MEJOR a PEOR postura (sin_datos al final)
+  note: string | null; // aviso honesto (p. ej. por qué la comparación es acotada)
+  generated_at: string;
+}
+
 // ─── Excepciones de hallazgos (ADR-021, 6.3.b/6.3.d) ────────────────────────
 export type ExceptionKind = "false_positive" | "risk_accepted" | "out_of_scope" | "mitigated";
 
@@ -528,6 +607,9 @@ export interface ExceptionIn {
   finding_title?: string | null;
   category?: string | null;
   expires_days?: number | null;
+  /** Seguimiento de parche: CVE del hallazgo y versión fija conocida (null = sin parche). */
+  cve_id?: string | null;
+  fixed_version?: string | null;
 }
 
 export interface ExceptionItem {
@@ -545,6 +627,10 @@ export interface ExceptionItem {
   approved_by: string | null;
   approved_at: string | null;
   expires_at: string | null;
+  cve_id: string | null;
+  /** null = aceptado sin parche; con valor y `patchable_since` = el parche ya apareció. */
+  fixed_version: string | null;
+  patchable_since: string | null;
 }
 
 export interface ExceptionList {
@@ -600,6 +686,8 @@ export interface EventItem {
   compliance_to: number | null;
   crit_delta: number;
   high_delta: number;
+  /** exception_patchable: { cve, fixed_version, source }. */
+  detail?: Record<string, unknown> | null;
 }
 export interface EventList {
   events: EventItem[];
@@ -620,4 +708,35 @@ export interface EventReport {
   days: number;
   totals: Record<string, number>;
   by_project: EventReportRow[];
+}
+
+
+// ─── Mapa de pipeline "usted está aquí" (GET /projects/{key}/pipeline) ───────
+export type PipelineStageKey = "commit" | "ci" | "quality" | "security" | "registry" | "release";
+export type PipelineStageState = "ok" | "fail" | "warn" | "pending" | "none";
+
+export interface PipelineStage {
+  key: PipelineStageKey;
+  state: PipelineStageState;
+  /** Código estable; el texto lo pone i18n (pipeline.code.<detail_code>). */
+  detail_code: string;
+  url: string | null;
+  meta: Record<string, string | number | boolean | null>;
+}
+
+export interface PushItem {
+  actor: string | null;
+  when: string | null;
+  ci_state: CIStatus;
+  sha_short: string | null;
+  message: string | null;
+  html_url: string | null;
+}
+
+export interface PipelineMap {
+  stages: PipelineStage[];
+  /** -1 = ninguna etapa con dato (sin pin). */
+  current_index: number;
+  last_push: PushItem | null;
+  recent_pushes: PushItem[];
 }

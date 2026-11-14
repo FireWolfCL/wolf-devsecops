@@ -14,21 +14,27 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, UniqueConstraint, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
 from ..rbac.roles import Role
-from ._shared import new_uuid
+from ._shared import new_uuid, tenant_id_column
 
 
 class User(Base):
     __tablename__ = "users"
+    # ADR-022 F0: username/email únicos POR TENANT (hoy globales; equivalente con 1 tenant).
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "username", name="uq_users_tenant_username"),
+        UniqueConstraint("tenant_id", "email", name="uq_users_tenant_email"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    tenant_id: Mapped[str] = tenant_id_column()
+    username: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # nullable: deja la puerta a cuentas federadas (SSO) sin password local (ADR-013 seam).
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Fuente de autenticación: "local" (bind contra hashed_password) o "ldap" (bind contra

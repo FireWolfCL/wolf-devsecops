@@ -33,9 +33,9 @@ def _connector_with(fixture: dict, status_code: int = 200) -> GitHubConnector:
 
 def _project() -> ProjectConfig:
     return ProjectConfig(
-        key="demo-app",
-        name="Demo App",
-        github=GitHubProjectConfig(repo="my-org/demo-app", ci_workflow="ci.yml"),
+        key="wolf-cloud",
+        name="Wolf-Cloud",
+        github=GitHubProjectConfig(repo="FireWolfCL/Wolf-Cloud", ci_workflow="ci.yml"),
     )
 
 
@@ -72,3 +72,31 @@ async def test_github_release_con_sbom():
     assert result.tag == "v0.2.0"
     assert result.sbom_url is not None
     assert str(result.sbom_url).endswith("sbom.cyclonedx.json")
+
+
+@pytest.mark.asyncio
+async def test_github_fetch_summary_for_ref_filtra_por_rama():
+    # Afirma que la lectura por rama manda ?branch=<ref> (conciencia de rama, ADR-024)
+    # y que mapea el conclusion del run de esa rama.
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["branch"] = request.url.params.get("branch")
+        return httpx.Response(
+            200,
+            json={"total_count": 1, "workflow_runs": [
+                {"conclusion": "success", "status": "completed", "head_branch": "sec",
+                 "run_number": 7, "html_url": "https://x/7", "updated_at": "2026-11-07T00:00:00Z"}
+            ]},
+        )
+
+    connector = GitHubConnector(
+        SourceConfig(url="https://api.github.com", token_env="GITHUB_TOKEN"),
+        token="fake-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    summary = await connector.fetch_summary_for_ref(_project(), "sec")
+
+    assert seen["branch"] == "sec"
+    assert summary.status == CIStatus.success and summary.branch == "sec"

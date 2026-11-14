@@ -13,13 +13,14 @@ from sqlalchemy import DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from ._shared import new_uuid
+from ._shared import new_uuid, tenant_id_column
 
 
 class PostureSnapshot(Base):
     __tablename__ = "posture_snapshots"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    tenant_id: Mapped[str] = tenant_id_column()
     project_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     captured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True

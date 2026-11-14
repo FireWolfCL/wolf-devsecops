@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 # ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -63,12 +63,30 @@ class CISummary(BaseModel):  # desde GitHub Actions
 
 
 class FindingsSummary(BaseModel):  # desde DefectDojo (o WSS)
-    counts: SeverityCount
+    counts: SeverityCount  # exposición CRUDA, inmutable (panel/PDF/tendencia). ADR-023.
     total_active: int
     # Conteo de hallazgos activos por tipo de escaneo (6.2): secrets, sast, sca,
     # container, iac, dast, other. Vacío si la fuente no expone el tipo.
     categories: dict[str, int] = Field(default_factory=dict)
     url: HttpUrl | None = None
+    # CVE con aceptación de riesgo aprobada (applied + risk_accepted) que SIGUEN
+    # presentes en `counts`. Solo se puebla en Contenedores: en DefectDojo el
+    # write-back ya los sacó de `counts` (neto == crudo). ADR-023.
+    accepted: SeverityCount = Field(default_factory=SeverityCount)
+
+    @property
+    def counts_net(self) -> "SeverityCount":
+        """Conteo NETO gobernado = crudo − aceptados, piso en 0 por severidad.
+
+        Lo que puntúa la rúbrica (ADR-023). `counts` NUNCA se muta (wolf-genjutsu).
+        """
+        return SeverityCount(
+            critical=max(0, self.counts.critical - self.accepted.critical),
+            high=max(0, self.counts.high - self.accepted.high),
+            medium=max(0, self.counts.medium - self.accepted.medium),
+            low=max(0, self.counts.low - self.accepted.low),
+            info=max(0, self.counts.info - self.accepted.info),
+        )
 
 
 class QualitySummary(BaseModel):  # desde SonarQube
@@ -100,6 +118,30 @@ class SourceResult(BaseModel, Generic[T]):
     fetched_at: datetime | None = None
 
 
+class ProvenanceInfo(BaseModel):
+    """Procedencia del estado que se está viendo: último commit del branch por
+    defecto del repo + quién lo autoró. Lectura read-only del forge (ADR-001), NO
+    depende de que haya corrido CI. `author` cae a null → "desconocido" si el forge
+    no expone autor (regla wolf-genjutsu: jamás se inventa un actor)."""
+    default_branch: str | None = None
+    sha_short: str | None = None
+    message: str | None = None  # primera línea del commit
+    author: str | None = None  # login (GitHub) o nombre git; null = desconocido
+    author_is_login: bool = False  # True solo si `author` es una cuenta del forge
+    authored_at: datetime | None = None
+    html_url: str | None = None
+    source: Literal["github", "gitlab"] | None = None
+
+
+class FreshnessStamp(BaseModel):
+    """Sello de frescura del resumen: `as_of` es el `fetched_at` MÁS VIEJO entre las
+    fuentes con dato (la verdad conservadora: "lo más añejo que ves es de esta hora"),
+    nunca `generated_at` (que es siempre "now" y mentiría). `stale` avisa si alguna
+    fuente mostrada se sirvió vencida (fuente caída, dato del último buen fetch)."""
+    as_of: datetime | None = None
+    stale: bool = False
+
+
 # ─── Agregados que consume el frontend ───────────────────────────────────────
 
 
@@ -113,6 +155,11 @@ class ProjectSummary(BaseModel):
     release: SourceResult[ReleaseSummary]
     # Postura de contenedores: Harbor + Trivy fusionados (CVEs de imagen). ADR-006.
     containers: SourceResult[FindingsSummary]
+    # Procedencia read-only del forge: último commit de `main` + autor (ADR-001).
+    # Independiente de CI; alimenta la etapa `commit` del pipeline map y el bloque CI.
+    provenance: SourceResult[ProvenanceInfo] | None = None
+    # Sello de frescura: hora del dato más viejo que se está mostrando (no generated_at).
+    freshness: FreshnessStamp | None = None
     # % de cumplimiento calculado al vuelo (docs/POSTURE-RUBRIC.md).
     posture: PostureScore | None = None
     # Deep-links de salida hacia cada herramienta (URL PÚBLICA navegable). Se
@@ -128,7 +175,10 @@ class ProjectListItem(BaseModel):  # versión liviana para el listado
     org: str = "Wolf"
     ci_status: CIStatus | None = None
     findings: SeverityCount | None = None
-    container_findings: SeverityCount | None = None  # Harbor + Trivy fusionados
+    container_findings: SeverityCount | None = None  # Harbor + Trivy fusionados (CRUDO)
+    # CVE de contenedor con riesgo aceptado (applied) presentes en el crudo. ADR-023.
+    # El front muestra "exposición N / aceptados M / neto N−M". DD no lo necesita (==0).
+    container_accepted: SeverityCount | None = None
     quality_gate: str | None = None
     worst_source_status: SourceStatus
     # Postura (versión liviana para el listado; detalle completo en el resumen).
@@ -165,6 +215,13 @@ CheckReason = Literal[
     # Los CVEs de contenedor ya los mide el pilar de Contenedores; el espejo de
     # esos mismos CVEs en Hallazgos (DefectDojo) no se cuenta dos veces (opción A).
     "covered_by_containers",
+    # El check pasa porque el (los) CVE que lo harían fallar tienen aceptación de
+    # riesgo aprobada: cuentan en el crudo pero no en el neto gobernado. ADR-023.
+    "accepted_risk",
+    # El check se excluyó de una comparación por rama porque su fuente NO es
+    # consciente de la rama (p. ej. DefectDojo/Trivy reflejan el último escaneo
+    # importado, no el ref): compararlo entre ramas sería deshonesto. ADR-024.
+    "not_branch_comparable",
 ]
 PostureBand = Literal[
     "solido", "aceptable", "en_riesgo", "critico", "evidencia_insuficiente", "sin_datos",
@@ -205,6 +262,32 @@ class PostureOverview(BaseModel):
     """Postura POR organización: el % de Wolf no se mezcla con el de externas."""
     orgs: list[GlobalPosture] = []
     primary: str = "Wolf"  # organización cuyo % es el titular del dashboard
+
+
+# ─── Comparación de postura ENTRE RAMAS (ADR-024) ────────────────────────────
+# Read-only y al vuelo (ADR-001/ADR-012): puntúa cada ref con el MISMO subconjunto
+# de checks conscientes de la rama (`comparable_checks`) para un delta justo. NO es
+# una línea de tiempo histórica (eso es ADR-019): es el estado AL HEAD de cada ref.
+class RefPosture(BaseModel):
+    ref: str  # nombre de la rama tal como se pidió
+    ci_branch: str | None = None  # rama que GitHub reporta para el run (honestidad: confirma el ref)
+    posture: PostureScore  # score calculado SOLO con los checks comparables
+    delta_vs_baseline: int | None = None  # score − score(baseline); None si alguno es sin_datos
+    # Regresiones/arreglos relativos al baseline, acotados a los checks comparables:
+    new_fails: list[str] = []  # checks que FALLAN aquí y NO fallaban en el baseline
+    resolved_fails: list[str] = []  # checks que PASAN aquí y fallaban en el baseline
+
+
+class PostureComparison(BaseModel):
+    project_key: str
+    baseline: str  # ref contra el que se miden los deltas
+    # Checks efectivamente comparados (el resto queda `na` = not_branch_comparable).
+    # Transparencia: el MVP arranca solo con ci-green (Sonar Community no da branch analysis).
+    comparable_checks: list[str] = []
+    refs: list[RefPosture] = []  # un bloque por ref pedido, en el orden pedido
+    ranking: list[str] = []  # refs de MEJOR a PEOR postura (sin_datos al final)
+    note: str | None = None  # aviso honesto (p. ej. por qué la comparación es acotada)
+    generated_at: datetime
 
 
 # ─── Dashboard POR HERRAMIENTA (vista transpuesta: una fuente, todos los
@@ -420,6 +503,17 @@ class ExceptionIn(BaseModel):
     finding_title: str | None = Field(default=None, max_length=300)
     category: str | None = Field(default=None, max_length=20)
     expires_days: int | None = Field(default=None, ge=1, le=365)  # solo risk_accepted
+    # Seguimiento de parche: CVE del hallazgo (si es CVE) y versión fija conocida AHORA.
+    # Si cve_id falta, el servidor lo deriva del título; sin CVE → no se rastrea.
+    cve_id: str | None = Field(default=None, max_length=40, pattern=r"^(?i:CVE-\d{4}-\d{4,19})$")
+    fixed_version: str | None = Field(default=None, max_length=200)
+
+    @field_validator("cve_id", "fixed_version", mode="before")
+    @classmethod
+    def _blank_to_none(cls, v: object) -> object:
+        # Un string vacío ("") desde la UI debe tratarse como ausente, no como un
+        # CVE malformado que dispara 422 contra el patrón. Sin CVE el server lo deriva del título.
+        return v or None
 
 
 class ExceptionOut(BaseModel):
@@ -437,6 +531,9 @@ class ExceptionOut(BaseModel):
     approved_by: str | None = None
     approved_at: datetime | None = None
     expires_at: datetime | None = None
+    cve_id: str | None = None
+    fixed_version: str | None = None  # NULL = sin parche conocido
+    patchable_since: datetime | None = None  # fijado cuando apareció el parche tras aceptar
 
 
 class ExceptionList(BaseModel):
@@ -465,6 +562,7 @@ class EventItem(BaseModel):
     compliance_to: float | None = None
     crit_delta: int = 0
     high_delta: int = 0
+    detail: dict | None = None  # p. ej. exception_patchable: {cve, fixed_version}
 
 
 class EventList(BaseModel):
@@ -489,3 +587,55 @@ class EventReport(BaseModel):
     days: int
     totals: dict[str, int] = {}
     by_project: list[EventReportRow] = []
+
+
+# ─── Mapa de pipeline "usted está aquí" (solo lectura, ADR-001) ──────────────
+# El backend entrega estados y CÓDIGOS estables; los textos los pone i18n en el front.
+
+PipelineStageKey = Literal["commit", "ci", "quality", "security", "registry", "release"]
+PipelineStageState = Literal["ok", "fail", "warn", "pending", "none"]
+
+
+class RunInfo(BaseModel):
+    """Un run reciente del CI, tal como lo devuelve GitHubConnector.recent_runs."""
+    actor: str | None = None
+    sha_short: str | None = None
+    message: str | None = None  # primera línea del commit
+    branch: str | None = None
+    event: str | None = None
+    ci_state: CIStatus = CIStatus.unknown
+    run_number: int | None = None
+    html_url: str | None = None
+    created_at: datetime | None = None
+
+
+class RegistryImage(BaseModel):
+    """Presencia de imagen publicada en Harbor (algún artefacto, escaneado o no)."""
+    present: bool = False
+    tag: str | None = None
+    pushed_at: datetime | None = None
+    artifacts: int = 0
+
+
+class PipelineStage(BaseModel):
+    key: PipelineStageKey
+    state: PipelineStageState
+    detail_code: str
+    url: str | None = None
+    meta: dict = {}
+
+
+class PushItem(BaseModel):
+    actor: str | None = None
+    when: str | None = None  # ISO-8601
+    ci_state: CIStatus = CIStatus.unknown
+    sha_short: str | None = None
+    message: str | None = None
+    html_url: str | None = None
+
+
+class PipelineMap(BaseModel):
+    stages: list[PipelineStage]
+    current_index: int  # -1 = ninguna etapa con dato (no hay pin)
+    last_push: PushItem | None = None
+    recent_pushes: list[PushItem] = []

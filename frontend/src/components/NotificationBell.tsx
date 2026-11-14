@@ -19,7 +19,7 @@ const COLOR: Record<string, string> = {
 // Marcadores geométricos coherentes con el panel (sin emojis): el glifo es un
 // trazo fino sobre un chip teñido con el color de severidad. Mismo vocabulario
 // que .sev-pill / .band-pill (fondo rgba + borde del color).
-const GLYPH_KINDS = ["resolved_critical", "resolved_high", "new_critical", "new_high", "improved", "worsened"];
+const GLYPH_KINDS = ["resolved_critical", "resolved_high", "new_critical", "new_high", "improved", "worsened", "exception_patchable"];
 
 function GlyphPath({ kind }: { kind: string }) {
   switch (kind) {
@@ -33,6 +33,8 @@ function GlyphPath({ kind }: { kind: string }) {
       return <path d="M8 12.5 V4 M4.5 7.5 L8 4 L11.5 7.5" />; // flecha arriba: mejora
     case "worsened":
       return <path d="M8 3.5 V12 M4.5 8.5 L8 12 L11.5 8.5" />; // flecha abajo: retroceso
+    case "exception_patchable":
+      return <path d="M8 2.8 L13.2 8 L8 13.2 L2.8 8 Z" />; // rombo: parche disponible (accionable)
     default:
       return <circle cx="8" cy="8" r="2.2" />;
   }
@@ -94,6 +96,12 @@ function text(ev: EventItem, lang: Lang): string {
     case "gate_error": return es ? "Quality gate en ERROR" : "Quality gate is ERROR";
     case "exception_expired": return es ? "Venció una aceptación de riesgo" : "A risk acceptance expired";
     case "exception_expire_failed": return es ? "Venció un riesgo y no se pudo revertir" : "A risk expired but revert failed";
+    case "exception_patchable": {
+      const d = ev.detail ?? {};
+      const cve = typeof d.cve === "string" ? d.cve : "?";
+      const fx = typeof d.fixed_version === "string" ? d.fixed_version : "?";
+      return es ? `Riesgo aceptado ${cve} ya tiene parche (v${fx}): remediar` : `Accepted risk ${cve} now has a patch (v${fx}): remediate`;
+    }
     default: return ev.kind;
   }
 }

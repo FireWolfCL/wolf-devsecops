@@ -18,13 +18,14 @@ from sqlalchemy import JSON, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from ._shared import new_uuid
+from ._shared import new_uuid, tenant_id_column
 
 
 class ProjectEvent(Base):
     __tablename__ = "project_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    tenant_id: Mapped[str] = tenant_id_column()
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )
@@ -51,6 +52,8 @@ class ProjectEvent(Base):
 class EventRead(Base):
     __tablename__ = "event_read"
 
+    # PK compuesta (tenant_id, user_id) (ADR-022 F0).
+    tenant_id: Mapped[str] = tenant_id_column(primary_key=True)
     user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     last_read_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

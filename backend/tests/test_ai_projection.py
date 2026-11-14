@@ -24,7 +24,7 @@ def test_proyeccion_allowlist_no_filtra_rutas_ni_campos_de_codigo():
         }
     ]
     briefs = project_findings(raw)
-    user = context_to_user(AIReviewContext(project_key="demo-app", findings=briefs))
+    user = context_to_user(AIReviewContext(project_key="wolf-cloud", findings=briefs))
 
     # Campos de ubicación/código NO cruzan (allow-list estructural).
     assert "file_path" not in user

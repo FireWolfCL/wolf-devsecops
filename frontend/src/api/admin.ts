@@ -7,7 +7,10 @@ import type {
   AvailableSource,
   ApplyMigrationsOut,
   CurrentVersionOut,
+  LDAPConfigIn,
+  LDAPConfigOut,
   LicenseStatus,
+  ScheduledReportConfig,
   LoginResponse,
   MFAEnableResponse,
   MFASetupResponse,
@@ -107,6 +110,19 @@ export const settingsApi = {
   putLicense: (token: string) =>
     request<LicenseStatus>("/api/v1/settings/license", { method: "PUT", json: { token } }),
   clearLicense: () => request<LicenseStatus>("/api/v1/settings/license", { method: "DELETE" }),
+  // SSO / LDAP (E2, feature Pro). Las escrituras exigen FEATURE_SSO (402 si no). El
+  // bind password es write-only (su endpoint aparte); la respuesta nunca trae el valor.
+  getLdap: () => request<LDAPConfigOut>("/api/v1/settings/ldap"),
+  putLdap: (body: LDAPConfigIn) =>
+    request<LDAPConfigOut>("/api/v1/settings/ldap", { method: "PUT", json: body }),
+  setLdapBindPassword: (password: string) =>
+    request<LDAPConfigOut>("/api/v1/settings/ldap/bind-password", { method: "PUT", json: { password } }),
+  clearLdapBindPassword: () =>
+    request<LDAPConfigOut>("/api/v1/settings/ldap/bind-password", { method: "DELETE" }),
+  // Reporte de avance programado (feature Pro): escribir exige FEATURE_REPORTS_SCHEDULED.
+  getScheduledReport: () => request<ScheduledReportConfig>("/api/v1/settings/scheduled-report"),
+  putScheduledReport: (body: { enabled: boolean; every_days: number }) =>
+    request<ScheduledReportConfig>("/api/v1/settings/scheduled-report", { method: "PUT", json: body }),
 };
 
 export const updatesApi = {

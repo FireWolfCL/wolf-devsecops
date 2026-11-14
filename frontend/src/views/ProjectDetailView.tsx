@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
@@ -6,8 +6,11 @@ import { useProjectSummary } from "../hooks";
 import type { CheckResult, FindingsSummary, PostureScore, SourceResult, SourceStatus } from "../api/types";
 import { FindingsDetail } from "../components/FindingsDetail";
 import { ExtLink } from "../components/util";
+import { PipelineMap } from "../components/PipelineMap";
+import { RefreshButton } from "../components/RefreshButton";
+import { refreshProject } from "../api/client";
 import { BAND_META, BandPill, PostureRing, SeverityBar, Skel, SourceChip, bandOf } from "../components/posture";
-import { useT, type TFn } from "../i18n";
+import { useT, useI18n, type TFn } from "../i18n";
 import { stagger } from "../motion";
 import { AIReviewPanel } from "./AIReviewPanel";
 
@@ -136,6 +139,7 @@ function Block<T>({
   index,
   render,
   link,
+  anchorId,
 }: {
   title: string;
   source: string;
@@ -144,11 +148,12 @@ function Block<T>({
   index: number;
   render: (data: T) => ReactNode;
   link?: string; // deep-link de salida a la herramienta (URL pública)
+  anchorId?: string; // ancla para saltos internos (p. ej. «aceptar en Hallazgos»)
 }) {
   const t = useT();
   const connectHint = connectVendor ? `${t("detail.connect")} ${connectVendor}` : undefined;
   return (
-    <div className={`card block src-card-${result.status}`} style={stagger(index)}>
+    <div id={anchorId} className={`card block src-card-${result.status}`} style={stagger(index)}>
       <h3>
         {title} <SourceChip name={source} status={result.status} connectHint={connectHint} />
         {link && (result.status === "ok" || result.status === "stale") && (
@@ -181,10 +186,54 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
   );
 }
 
+/** Sello de frescura: "Datos al día de {hora relativa}" + aviso si algún dato es stale.
+ * Usa el fetched_at más viejo (as_of) que calcula el backend, no generated_at. */
+function Freshness({ stamp }: { stamp: import("../api/types").FreshnessStamp | null }) {
+  const t = useT();
+  const { lang } = useI18n();
+  if (!stamp || !stamp.as_of) return null;
+  const ms = new Date(stamp.as_of).getTime();
+  let rel = new Date(stamp.as_of).toLocaleString();
+  if (!Number.isNaN(ms)) {
+    const secs = Math.round((ms - Date.now()) / 1000);
+    const units: [Intl.RelativeTimeFormatUnit, number][] = [["day", 86400], ["hour", 3600], ["minute", 60]];
+    try {
+      const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+      const hit = units.find(([, n]) => Math.abs(secs) >= n);
+      rel = hit ? rtf.format(Math.round(secs / hit[1]), hit[0]) : rtf.format(0, "second");
+    } catch { /* deja el toLocaleString */ }
+  }
+  return (
+    <p className="muted mono deps-meta">
+      {t("detail.freshness", { when: rel })}
+      {stamp.stale && <span className="flag" style={{ marginLeft: 8 }}>{t("detail.stale")}</span>}
+    </p>
+  );
+}
+
+/** Procedencia del estado que se ve: último commit de `main` + autor, SIEMPRE visible
+ * e INDEPENDIENTE de CI (responde "qué versión se chequea y quién la pusheó"). Solo
+ * se oculta si no hay dato de procedencia (fuente caída → fail-closed, no inventa). */
+function Provenance({ prov }: { prov: import("../api/types").ProvenanceInfo | null }) {
+  const t = useT();
+  if (!prov || !prov.sha_short) return null;
+  const sha = prov.html_url
+    ? <ExtLink href={prov.html_url}><code>{prov.sha_short}</code></ExtLink>
+    : <code>{prov.sha_short}</code>;
+  return (
+    <p className="muted mono deps-meta">
+      {t("detail.provLine")}{" "}
+      {prov.default_branch && <><strong>{prov.default_branch}</strong>{" · "}</>}
+      {sha}{" · "}{prov.author ?? t("pipeline.unknownActor")}
+      {prov.message && <> — {prov.message}</>}
+    </p>
+  );
+}
+
 /** Counts + toggle «Ver detalle» → lista real (QUÉ está afectado, CÓMO mejorarlo).
  * Reutilizable: Contenedores (source="trivy") y Hallazgos (source="defectdojo"). */
 function FindingsBlock({
-  projectKey, source, f, status, barTitle, noteKey, selectable = false,
+  projectKey, source, f, status, barTitle, noteKey, selectable = false, openOnHash,
 }: {
   projectKey: string;
   source: string;
@@ -193,14 +242,24 @@ function FindingsBlock({
   barTitle: string;
   noteKey?: string; // 2.3: nota que explica el pilar (exposición vs. gestión)
   selectable?: boolean;
+  openOnHash?: string; // abre el detalle cuando la URL llega con este hash (salto «aceptar en Hallazgos»)
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const canExpand = (status === "ok" || status === "stale") && f.total_active > 0;
+  // Un enlace desde Contenedores («aceptar en Hallazgos») fija el hash; abrimos el
+  // detalle al llegar y en cada cambio de hash, sin acoplar estado entre tarjetas.
+  useEffect(() => {
+    if (!openOnHash || !canExpand) return;
+    const check = () => { if (window.location.hash === `#${openOnHash}`) setOpen(true); };
+    check();
+    window.addEventListener("hashchange", check);
+    return () => window.removeEventListener("hashchange", check);
+  }, [openOnHash, canExpand]);
   return (
     <>
       {noteKey && <p className="pillar-note muted">{t(noteKey)}</p>}
-      <SeverityBar title={barTitle} counts={f.counts} empty={null} />
+      <SeverityBar title={barTitle} counts={f.counts} accepted={f.accepted} empty={null} />
       <Row k={t("detail.active")} v={f.total_active} />
       {canExpand && (
         <>
@@ -288,6 +347,7 @@ export function ProjectDetailView({
           <div className="detail-title-row">
             <h2 className="detail-title">{data.name}</h2>
             <div className="detail-actions">
+              <RefreshButton onRefresh={() => refreshProject(projectKey)} />
               <Link className="btn sm" to={`/projects/${encodeURIComponent(projectKey)}/deps`}>
                 {t("detail.deps")}
               </Link>
@@ -300,16 +360,23 @@ export function ProjectDetailView({
               <Link className="btn sm" to={`/projects/${encodeURIComponent(projectKey)}/history`}>
                 {t("detail.history")}
               </Link>
+              <Link className="btn sm" to={`/projects/${encodeURIComponent(projectKey)}/compare`}>
+                {t("detail.compare")}
+              </Link>
               <Link className="btn sm report-btn" to={`/projects/${encodeURIComponent(projectKey)}/report`}>
                 {t("common.report")}
               </Link>
             </div>
           </div>
+          <Freshness stamp={data.freshness} />
+          <Provenance prov={data.provenance?.data ?? null} />
           {data.posture ? (
             <PostureHeader posture={data.posture} />
           ) : (
             <div className="alert info">{t("detail.noScore")}</div>
           )}
+
+          <PipelineMap projectKey={projectKey} />
 
           {data.posture && data.posture.checks.length > 0 && (
             <TopActionsCard checks={data.posture.checks} />
@@ -331,6 +398,7 @@ export function ProjectDetailView({
                 result={data.findings}
                 link={data.links?.defectdojo}
                 connectVendor="DefectDojo"
+                anchorId="findings-card"
                 render={(f) => (
                   <FindingsBlock
                     projectKey={projectKey}
@@ -340,6 +408,7 @@ export function ProjectDetailView({
                     barTitle={t("detail.severity")}
                     noteKey="detail.note.findings"
                     selectable={data.org === "Wolf"}
+                    openOnHash="findings"
                   />
                 )}
               />

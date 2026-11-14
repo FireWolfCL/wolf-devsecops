@@ -9,6 +9,11 @@
 #
 # Opciones:
 #   --org <nombre>  organización para agrupar el proyecto en el panel (def. Local)
+#   --ref <git-ref>  (con --repo) escanea un WORKTREE EFÍMERO fijado a ese ref
+#                    (p.ej. origin/main) en vez de la copia de trabajo viva: lee SOLO
+#                    archivos versionados en ese ref — sin rama ajena ni archivos
+#                    sueltos (.venv, builds). Determinista y no destructivo.
+#   --fetch          (con --ref) hace `git fetch origin` antes, para refrescar el ref.
 #   --gitleaks   además corre Gitleaks sobre el HISTORIAL git (secretos); opt-in
 #   --no-sonar   solo Trivy            --no-trivy   solo Sonar (requiere --repo)
 #   --no-sync    no sincroniza/reinicia el backend (el caller lo hará)
@@ -32,6 +37,7 @@ warn() { printf '\033[1;33m[scan]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[scan]\033[0m %s\n' "$*" >&2; exit 1; }
 
 REPO=""; IMAGE=""; KEY=""; NAME=""; ORG="Local"; DO_SONAR="yes"; DO_TRIVY="yes"; DO_SYNC="yes"; DO_GITLEAKS="no"
+REF=""; DO_FETCH="no"
 YAML="$ROOT/config/projects.yaml"
 COMPOSE="${WOLF_COMPOSE_FILE:-$HERE/docker-compose.install.yml}"
 while [ $# -gt 0 ]; do
@@ -41,6 +47,8 @@ while [ $# -gt 0 ]; do
     --key)          [ $# -ge 2 ] || die "--key requiere un valor."; KEY="$2"; shift 2 ;;
     --name)         [ $# -ge 2 ] || die "--name requiere un valor."; NAME="$2"; shift 2 ;;
     --org)          [ $# -ge 2 ] || die "--org requiere un valor."; ORG="$2"; shift 2 ;;
+    --ref)          [ $# -ge 2 ] || die "--ref requiere un git-ref."; REF="$2"; shift 2 ;;
+    --fetch)        DO_FETCH="yes"; shift ;;
     --config)       [ $# -ge 2 ] || die "--config requiere una ruta."; YAML="$2"; shift 2 ;;
     --compose-file) [ $# -ge 2 ] || die "--compose-file requiere una ruta."; COMPOSE="$2"; shift 2 ;;
     --gitleaks)     DO_GITLEAKS="yes"; shift ;;
@@ -82,16 +90,47 @@ docker volume inspect "$RVOL" >/dev/null 2>&1 \
 
 FAIL=0
 TMPDIR_SCAN=""
-cleanup() { [ -n "$TMPDIR_SCAN" ] && rm -rf "$TMPDIR_SCAN"; }
+WT_ROOT=""; WORKTREE=""   # worktree efímero (--ref); se elimina en cleanup
+cleanup() {
+  [ -n "$TMPDIR_SCAN" ] && rm -rf "$TMPDIR_SCAN"
+  # Desmonta el worktree (devuelve el ref al repo) y borra su carpeta. No toca la
+  # copia de trabajo viva del operador: worktree es un checkout aparte, read-only aquí.
+  [ -n "$WORKTREE" ] && git -C "$REPO" worktree remove --force "$WORKTREE" 2>/dev/null
+  [ -n "$WT_ROOT" ] && rm -rf "$WT_ROOT"
+}
 trap cleanup EXIT
+
+# ── --ref: escaneo determinista de un ref (p.ej. origin/main) vía worktree efímero ──
+# Un worktree sólo materializa archivos VERSIONADOS en ese ref: ni rama ajena, ni
+# .venv/builds/.DS_Store sueltos. Así la postura no depende de qué haya checked-out.
+SRC="$REPO"   # fuente real que Trivy/Sonar escanean (repo vivo, o el worktree si --ref)
+if [ -n "$REF" ]; then
+  [ -n "$REPO" ] || die "--ref requiere --repo (es un ref del repo local)."
+  command -v git >/dev/null 2>&1 || die "--ref necesita git y no está instalado."
+  git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || die "--ref: $REPO no es un repo git."
+  if [ "$DO_FETCH" = "yes" ]; then
+    log "git fetch origin (refrescando refs remotos)…"
+    git -C "$REPO" fetch --quiet --prune origin 2>/dev/null || warn "git fetch falló; uso el ref local '$REF'."
+  fi
+  git -C "$REPO" rev-parse --verify --quiet "$REF^{commit}" >/dev/null 2>&1 \
+    || die "--ref: el ref '$REF' no existe en $REPO (¿falta --fetch?)."
+  WT_ROOT="$(mktemp -d)"; WORKTREE="$WT_ROOT/src"
+  if git -C "$REPO" worktree add --detach --force "$WORKTREE" "$REF" >/dev/null 2>&1; then
+    SRC="$WORKTREE"
+    log "worktree efímero fijado a '$REF' → escaneo de solo-versionado (no la copia viva)."
+  else
+    rm -rf "$WT_ROOT"; WT_ROOT=""; WORKTREE=""
+    die "No pude crear el worktree en '$REF'."
+  fi
+fi
 
 # ── Trivy: repo (fs) ─────────────────────────────────────────────────────────
 trivy_repo() {
   local ign=()
   # Trivy fs no auto-detecta .trivyignore (cwd=/): se pasa explícito, solo de este repo.
-  [ -f "$REPO/.trivyignore" ] && ign=(--ignorefile /src/.trivyignore)
+  [ -f "$SRC/.trivyignore" ] && ign=(--ignorefile /src/.trivyignore)
   log "Trivy fs  $REPO -> $KEY.json"
-  docker run --rm -v "$REPO:/src:ro" -v "$RVOL:/reports" -v "$CVOL:/root/.cache" "$TRIVY_IMG" \
+  docker run --rm -v "$SRC:/src:ro" -v "$RVOL:/reports" -v "$CVOL:/root/.cache" "$TRIVY_IMG" \
     fs --quiet --scanners vuln,secret,misconfig --skip-dirs "$TRIVY_SKIP" \
     ${ign[@]+"${ign[@]}"} --format json -o "/reports/$KEY.json" /src >/dev/null 2>&1
 }
@@ -133,7 +172,7 @@ fi
 
 if [ "$DO_SONAR" = "yes" ] && [ -n "$REPO" ]; then
   if grep -Eq '^SONAR_TOKEN=.+' "$ENV_FILE" 2>/dev/null; then
-    bash "$HERE/analyze-sonar.sh" --repo "$REPO" --key "$KEY" --name "$NAME" --org "$ORG" --no-sync \
+    bash "$HERE/analyze-sonar.sh" --repo "$SRC" --key "$KEY" --name "$NAME" --org "$ORG" --no-sync \
       || { warn "✗ Sonar falló sobre el repo."; FAIL=1; }
   else
     warn "SONAR_TOKEN vacío en deploy/.env: se omite Sonar (corre provision-sources.sh y luego este script)."

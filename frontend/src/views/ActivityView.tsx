@@ -18,6 +18,7 @@ const KIND_COLOR: Record<string, string> = {
   improved: "#34d399", resolved_critical: "#34d399", resolved_high: "#34d399",
   worsened: "#f87171", new_critical: "#f87171", new_high: "#f5a524",
   ci_failed: "#f87171", gate_error: "#f5a524", exception_expired: "#f5a524", exception_expire_failed: "#f87171",
+  exception_patchable: "#f5a524",
 };
 
 function label(kind: string, lang: Lang): string {
@@ -33,15 +34,16 @@ function label(kind: string, lang: Lang): string {
     case "gate_error": return es ? "Quality gate en ERROR" : "Quality gate ERROR";
     case "exception_expired": return es ? "Aceptaciones de riesgo vencidas" : "Expired risk acceptances";
     case "exception_expire_failed": return es ? "Vencimientos sin revertir" : "Expiries not reverted";
+    case "exception_patchable": return es ? "Riesgos aceptados ya parchables" : "Accepted risks now patchable";
     default: return kind;
   }
 }
 
-const ORDER = ["resolved_critical", "resolved_high", "improved", "new_critical", "new_high", "worsened", "ci_failed", "gate_error", "exception_expired", "exception_expire_failed"];
+const ORDER = ["resolved_critical", "resolved_high", "improved", "new_critical", "new_high", "worsened", "ci_failed", "gate_error", "exception_expired", "exception_expire_failed", "exception_patchable"];
 
 // Marcador geométrico (mismo lenguaje que la campana y las pastillas del panel):
 // glifo de trazo fino sobre un chip teñido con el color del evento. Sin emojis.
-const GLYPH_KINDS = ["resolved_critical", "resolved_high", "new_critical", "new_high", "improved", "worsened"];
+const GLYPH_KINDS = ["resolved_critical", "resolved_high", "new_critical", "new_high", "improved", "worsened", "exception_patchable"];
 
 function GlyphPath({ kind }: { kind: string }) {
   switch (kind) {
@@ -55,6 +57,8 @@ function GlyphPath({ kind }: { kind: string }) {
       return <path d="M8 12.5 V4 M4.5 7.5 L8 4 L11.5 7.5" />;
     case "worsened":
       return <path d="M8 3.5 V12 M4.5 8.5 L8 12 L11.5 8.5" />;
+    case "exception_patchable":
+      return <path d="M8 2.8 L13.2 8 L8 13.2 L2.8 8 Z" />; // rombo: parche disponible (accionable)
     default:
       return <circle cx="8" cy="8" r="2.2" />;
   }
@@ -187,6 +191,8 @@ export function ActivityView() {
                   {ev.band_from && ev.band_to ? `${ev.band_from} → ${ev.band_to}` : ""}
                   {ev.crit_delta ? ` crit ${ev.crit_delta > 0 ? "+" : ""}${ev.crit_delta}` : ""}
                   {ev.high_delta ? ` high ${ev.high_delta > 0 ? "+" : ""}${ev.high_delta}` : ""}
+                  {ev.kind === "exception_patchable" && ev.detail
+                    ? `${String(ev.detail.cve ?? "")} → v${String(ev.detail.fixed_version ?? "")}` : ""}
                 </span>
               </li>
             ))}

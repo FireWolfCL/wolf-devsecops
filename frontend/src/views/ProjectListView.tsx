@@ -14,6 +14,8 @@ import {
   SourceChip,
   bandOf,
 } from "../components/posture";
+import { RefreshButton } from "../components/RefreshButton";
+import { refreshAll } from "../api/client";
 import { usePosture, useProjects, useSpark } from "../hooks";
 import { useT } from "../i18n";
 import { stagger } from "../motion";
@@ -273,6 +275,7 @@ function ProjectCard({ item, index, spark, onSelect }: { item: ProjectListItem; 
         <SeverityBar
           title={t("list.sevContainers")}
           counts={item.container_findings}
+          accepted={item.container_accepted}
           empty={<span>{t("list.noImages")}</span>}
           compact
         />
@@ -438,6 +441,7 @@ export function ProjectListView({ onSelect }: { onSelect: (key: string) => void 
           {t("nav.projects")}{data ? <span className="mono muted"> · {shownCount}{shownCount !== data.length ? `/${data.length}` : ""}</span> : null}
         </h2>
         <div className="list-tools">
+          <RefreshButton onRefresh={refreshAll} />
           {bandFilter && (
             <button type="button" className="chip-clear" onClick={() => setBandFilter(null)}>
               {selected} · {t(`band.${bandOf(bandFilter)}`)} ✕

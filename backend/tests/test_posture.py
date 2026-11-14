@@ -155,3 +155,32 @@ def test_global_critico_topa_aceptable():
     blocks["containers"] = _ok(_findings(critical=2))
     g = score_global([_summary(**blocks)])
     assert "en_riesgo" in g.distribution  # el proyecto quedó en riesgo por el crítico
+
+
+# ─── only_checks: comparación por rama (ADR-024) ──────────────────────────────
+def test_only_checks_ci_green_excluye_el_resto():
+    # ci verde + findings con crítico: normalmente el crítico tapa la banda, pero con
+    # only_checks={ci-green} SOLO cuenta ci-green ⇒ score 100, cobertura 10.
+    from wolf_devsecops.core.posture import BRANCH_COMPARABLE_CHECKS
+
+    blocks = _todo_pass_blocks()
+    blocks["findings"] = _ok(_findings(critical=3))
+    p = score_project(_summary(**blocks), only_checks=BRANCH_COMPARABLE_CHECKS)
+    assert p.score == 100 and p.coverage == 10
+    ci = next(c for c in p.checks if c.id == "ci-green")
+    assert ci.result == "pass"
+    # todo lo no comparable queda na con la razón explícita
+    no_comp = [c for c in p.checks if c.id != "ci-green"]
+    assert no_comp and all(c.result == "na" and c.reason_code == "not_branch_comparable" for c in no_comp)
+
+
+def test_only_checks_ci_rojo_da_cero():
+    p = score_project(_summary(ci=_ok(_ci(CIStatus.failure))), only_checks=frozenset({"ci-green"}))
+    assert p.score == 0 and p.coverage == 10
+    assert next(c for c in p.checks if c.id == "ci-green").result == "fail"
+
+
+def test_only_checks_sin_run_es_sin_datos():
+    # rama sin verdicto de CI (unknown) ⇒ ci-green na ⇒ nada medido ⇒ sin_datos (honesto).
+    p = score_project(_summary(ci=_ok(_ci(CIStatus.unknown))), only_checks=frozenset({"ci-green"}))
+    assert p.score is None and p.band == "sin_datos"

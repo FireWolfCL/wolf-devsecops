@@ -1,7 +1,7 @@
 // Configuración (admin): fuentes y proyectos (la IA vive en pages/AIConfig.tsx).
 // NUNCA se muestra ni se envía el valor de un token: solo el NOMBRE de la variable
 // de entorno y si está presente.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
@@ -253,6 +253,67 @@ function ProjectsSection() {
   );
 }
 
+// ─── Reporte de avance programado (feature Pro) ──────────────────────────────
+function ScheduledReportSection() {
+  const t = useT();
+  const { data, loading, reload } = useAsync(settingsApi.getScheduledReport, []);
+  const [enabled, setEnabled] = useState(false);
+  const [everyDays, setEveryDays] = useState(7);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data) { setEnabled(data.enabled); setEveryDays(data.every_days); }
+  }, [data]);
+
+  const save = async () => {
+    setBusy(true); setError(null); setSaved(false);
+    try {
+      await settingsApi.putScheduledReport({ enabled, every_days: everyDays });
+      setSaved(true); reload();
+    } catch (e) {
+      setError(errText(e)); // 402 si la edición no habilita la feature
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <section className="section">
+      <h3>{t("sreport.title")}</h3>
+      <p className="muted">{t("sreport.intro")}</p>
+      <div className="card">
+        {!data && loading && <p className="state">{t("common.loading")}</p>}
+        {data && !data.available && <div className="alert warn" role="status">{t("sreport.proGate")}</div>}
+        {data && (
+          <>
+            <label className="check">
+              <input type="checkbox" checked={enabled}
+                onChange={(e) => { setEnabled(e.target.checked); setSaved(false); }} />
+              <span>{t("sreport.enabled")}</span>
+            </label>
+            <div className="field">
+              <label htmlFor="sr-days">{t("sreport.everyDays")}</label>
+              <input id="sr-days" type="number" min={1} max={90} value={everyDays}
+                onChange={(e) => { setEveryDays(Math.max(1, Math.min(90, Number(e.target.value) || 7))); setSaved(false); }} />
+            </div>
+            <div className="row">
+              <span className="muted">{t("sreport.lastSent")}</span>
+              <span className="mono">{data.last_sent_at ? fmtDate(data.last_sent_at) : "—"}</span>
+            </div>
+            {error && <div className="alert err" role="alert">{error}</div>}
+            {saved && <div className="alert ok" role="status">{t("sreport.saved")}</div>}
+            <div className="form-actions">
+              <button type="button" className="btn primary" onClick={save} disabled={busy || !data.available}>
+                {busy ? t("common.saving") : t("sreport.save")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function Settings() {
   const t = useT();
   return (
@@ -261,6 +322,7 @@ export function Settings() {
       <p className="muted">{t("settings.intro")}</p>
       <SourcesSection />
       <ProjectsSection />
+      <ScheduledReportSection />
       <section className="section">
         <p className="muted">
           {t("settings.aiMoved")} <Link to="/admin/ai">{t("settings.aiGo")}</Link>

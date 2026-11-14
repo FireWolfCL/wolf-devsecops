@@ -33,6 +33,7 @@ def _item(r) -> EventItem:
         compliance_to=r.compliance_to,
         crit_delta=r.crit_delta,
         high_delta=r.high_delta,
+        detail=r.detail,
     )
 
 

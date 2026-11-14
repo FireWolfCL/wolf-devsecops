@@ -73,8 +73,8 @@ provision_sonar() {
   # Proyecto demo (ignora si ya existe).
   curl -s -o /dev/null -u "$AUTH" -X POST \
     "$SONAR/api/projects/create" \
-    --data-urlencode "project=cicd" \
-    --data-urlencode "name=CICD" || true
+    --data-urlencode "project=wolf-cloud" \
+    --data-urlencode "name=Wolf-Cloud" || true
 
   # Token: revoca el previo y genera uno nuevo.
   curl -s -o /dev/null -u "$AUTH" -X POST \
@@ -108,10 +108,10 @@ provision_defectdojo() {
     pt="$(curl -s -X POST "$DD/api/v2/product_types/" -H "$H" -H 'Content-Type: application/json' \
       -d '{"name":"Research and Development","description":"auto"}' | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)"
   fi
-  # Producto demo "CICD" (ignora si ya existe).
+  # Producto demo "Wolf-Cloud" (ignora si ya existe).
   curl -s -o /dev/null -X POST "$DD/api/v2/products/" -H "$H" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"CICD\",\"description\":\"Proyecto demo\",\"prod_type\":${pt:-1}}" || true
-  log "DefectDojo: producto 'CICD' asegurado."
+    -d "{\"name\":\"Wolf-Cloud\",\"description\":\"Proyecto demo\",\"prod_type\":${pt:-1}}" || true
+  log "DefectDojo: producto 'Wolf-Cloud' asegurado."
 }
 
 # ─── Harbor (opcional: solo si su stack está arriba) ─────────────────────────
@@ -126,8 +126,8 @@ provision_harbor() {
   # Proyecto demo (ignora si ya existe).
   curl -s -o /dev/null -u "$AUTH" -X POST "$HARBOR/api/v2.0/projects" \
     -H 'Content-Type: application/json' \
-    -d '{"project_name":"cicd","metadata":{"public":"true"}}' || true
-  log "Harbor: proyecto 'cicd' asegurado (probe por systeminfo público = verde)."
+    -d '{"project_name":"wolf-cloud","metadata":{"public":"true"}}' || true
+  log "Harbor: proyecto 'wolf-cloud' asegurado (probe por systeminfo público = verde)."
 }
 
 log "== Provisionando fuentes de Wolf DevSecOps =="

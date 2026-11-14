@@ -9,6 +9,7 @@ Sin secretos en logs. Los tokens viven en el entorno (WOLF_TELEGRAM_*, WOLF_SMTP
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -52,7 +53,14 @@ _ICON = {
     "new_critical": "🔴", "resolved_critical": "✅", "new_high": "🟠",
     "resolved_high": "✅", "improved": "📈", "worsened": "📉",
     "ci_failed": "🚧", "gate_error": "🛑", "exception_expired": "⏰", "exception_expire_failed": "⛔",
+    "exception_patchable": "🩹",
 }
+
+
+def _plain(v: object) -> str:
+    """Valor de `detail` saneado para el mensaje HTML de Telegram/email: viene de un reporte
+    externo, así que se escapa (no puede inyectar marcado) y se acota."""
+    return html.escape(str(v or "?")[:80])
 
 
 def _line(ev: ProjectEvent, lang: str) -> str:
@@ -84,6 +92,11 @@ def _line(ev: ProjectEvent, lang: str) -> str:
         case "exception_expire_failed":
             body = ("venció una aceptación de riesgo pero NO se pudo revertir en la fuente: sigue oculta"
                     if es else "a risk acceptance expired but could NOT be reverted at the source: still hidden")
+        case "exception_patchable":
+            d = ev.detail or {}
+            cve, fix = _plain(d.get("cve")), _plain(d.get("fixed_version"))
+            body = (f"riesgo aceptado {cve} YA tiene parche (v{fix}): remediar y revocar la excepción"
+                    if es else f"accepted risk {cve} now has a patch (v{fix}): remediate and revoke the exception")
         case _:
             body = ev.kind
     return f"{icon} <b>{ev.project_key}</b> — {body}"

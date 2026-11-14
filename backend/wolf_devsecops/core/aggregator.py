@@ -15,7 +15,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from urllib.parse import quote
+
+if TYPE_CHECKING:
+    from ..services.governance import GovernanceProvider
 
 from ..connectors.base import Connector, ConnectorUnavailable
 from ..connectors.registry import CONNECTOR_REGISTRY
@@ -24,11 +28,15 @@ from ..models import (
     DependencyInventory,
     DependencyItem,
     FindingsSummary,
+    FreshnessStamp,
     GlobalPosture,
+    PostureComparison,
     PostureOverview,
     ProjectListItem,
     ProjectSummary,
+    ProvenanceInfo,
     QualitySummary,
+    RefPosture,
     SeverityCount,
     SourceDetail,
     SourceResult,
@@ -40,9 +48,14 @@ from ..settings import get_settings
 from .cache import TTLCache
 from .config import AppConfig, ProjectConfig
 from .credentials import resolve_token
-from .posture import score_global, score_project
+from .posture import BRANCH_COMPARABLE_CHECKS, score_global, score_project
 
 _NEGATIVE_TTL_SECONDS = 10  # cuánto se recuerda un fallo de fuente
+
+
+class BranchCompareUnsupported(Exception):
+    """La comparación por rama no aplica a este proyecto (p. ej. forge sin runs por
+    rama). La capa de ruta la traduce a 422 con el mensaje (saneado) para el operador."""
 
 # Para el semáforo del listado: cuán "malo" es cada estado.
 _STATUS_RANK = {
@@ -54,7 +67,10 @@ _STATUS_RANK = {
 
 
 class Aggregator:
-    def __init__(self, config: AppConfig, cache: TTLCache) -> None:
+    def __init__(
+        self, config: AppConfig, cache: TTLCache,
+        governance: "GovernanceProvider | None" = None,
+    ) -> None:
         self._config = config
         self._cache = cache
         settings = get_settings()
@@ -63,6 +79,10 @@ class Aggregator:
         self._sem = asyncio.Semaphore(settings.max_upstream_concurrency)
         self._neg = TTLCache(_NEGATIVE_TTL_SECONDS, 0)
         self._inflight: dict[str, asyncio.Task] = {}
+        # Overlay de gobierno para el neto (ADR-023). Default null ⇒ neto == crudo
+        # (tests/CLI/sin DB). La postura sigue pura: la resta se hornea en el summary.
+        from ..services.governance import NullGovernance
+        self._governance = governance or NullGovernance()
 
     # ─── construcción de conectores ──────────────────────────────────────────
 
@@ -83,6 +103,14 @@ class Aggregator:
         return getattr(project, source_name, None) is not None
 
     # ─── obtención de un bloque, con caché y degradación ──────────────────────
+
+    async def invalidate(self, project_key: str | None = None) -> int:
+        """Invalida la caché (positiva y negativa) de un proyecto, o TODA si es None.
+        La próxima lectura refetchea la fuente. Es el motor del 'actualizar ahora'."""
+        prefix = f"{project_key}:" if project_key else None
+        n = await self._cache.invalidate(prefix)
+        await self._neg.invalidate(prefix)
+        return n
 
     async def _cached_fetch(self, cache_key: str, call) -> SourceResult:
         """Cache-first + single-flight + timeout por fuente + degradación.
@@ -189,11 +217,46 @@ class Aggregator:
                 status=SourceStatus.unavailable,
                 error="Las fuentes de contenedor (Harbor/Trivy) no están disponibles.",
             )
+        accepted = await self._accepted_container_counts(project)
         return SourceResult(
             status=status,
-            data=FindingsSummary(counts=merged, total_active=total),
+            data=FindingsSummary(counts=merged, total_active=total, accepted=accepted),
             fetched_at=fetched,
         )
+
+    async def _accepted_container_counts(self, project: ProjectConfig) -> SeverityCount:
+        """CVE de contenedor con riesgo aceptado (applied) → conteo por severidad, para
+        el NETO gobernado (ADR-023). Solo **Trivy** aporta CVE por hallazgo; Harbor no,
+        así que su exposición nunca se resta (sub-resta honesta, nunca sobre-resta).
+
+        Fail-closed: si Trivy no está configurado/cae, devuelve 0 ⇒ neto == crudo ⇒ el
+        CVE sigue contando. El cruce usa el mapa CVE→severidad **post-ignore** del
+        conector (6.3.c), evitando doble-resta de lo ya suprimido por archivo.
+        """
+        if "trivy" not in self._config.sources or not self._project_uses(project, "trivy"):
+            return SeverityCount()
+        accepted_cves = await self._governance.accepted_cves(project.key)
+        if not accepted_cves:
+            return SeverityCount()
+        connector = self._build_connector("trivy")
+        if connector is None:
+            return SeverityCount()
+        try:
+            sevs = await connector.cve_severities(project)  # CVE(MAYÚS) → severidad
+        except ConnectorUnavailable:
+            return SeverityCount()
+        tally = {s: 0 for s in ("critical", "high", "medium", "low", "info")}
+        for cve in accepted_cves:
+            sev = sevs.get(cve)
+            if sev in tally:  # guard: una severidad fuera de rango no revienta el conteo
+                tally[sev] += 1
+        return SeverityCount(**tally)
+
+    async def invalidate_governance(self, project_key: str | None = None) -> None:
+        """Descarta el overlay de gobierno (ADR-023). Lo llama exceptions_service al
+        aprobar/revocar/vencer una aceptación: `invalidate()` de caché de fuentes NO
+        basta porque el gobierno vive en un overlay aparte."""
+        await self._governance.invalidate(project_key)
 
     # ─── API pública ──────────────────────────────────────────────────────────
 
@@ -246,12 +309,13 @@ class Aggregator:
 
     async def get_summary(self, project: ProjectConfig) -> ProjectSummary:
         forge = self._forge_source(project) or "github"
-        ci, findings, quality, release, containers = await asyncio.gather(
+        ci, findings, quality, release, containers, provenance = await asyncio.gather(
             self._fetch_block(project, forge),
             self._fetch_block(project, "defectdojo"),
             self._fetch_block(project, "sonarqube"),
             self._release_block(project),
             self._containers_block(project),
+            self._provenance_block(project),
         )
         summary = ProjectSummary(
             key=project.key,
@@ -262,11 +326,26 @@ class Aggregator:
             quality=quality,
             release=release,
             containers=containers,
+            provenance=provenance,
             links=self._web_links(project),
             generated_at=datetime.now(UTC),
         )
+        summary.freshness = self._freshness(summary)  # hora del dato más viejo (no generated_at)
         summary.posture = score_project(summary)  # al vuelo (ADR-012: no se persiste)
         return summary
+
+    @staticmethod
+    def _freshness(summary: ProjectSummary) -> FreshnessStamp:
+        """Sello conservador de frescura: `as_of` = el `fetched_at` MÁS VIEJO entre las
+        fuentes con dato (nunca generated_at, que siempre sería "now"). `stale` = alguna
+        fuente mostrada se sirvió vencida. Procedencia incluida; bloques sin dato se saltan."""
+        blocks: list[SourceResult | None] = [
+            summary.ci, summary.findings, summary.quality,
+            summary.release, summary.containers, summary.provenance,
+        ]
+        stamps = [b.fetched_at for b in blocks if b is not None and b.fetched_at is not None]
+        stale = any(b is not None and b.status == SourceStatus.stale for b in blocks)
+        return FreshnessStamp(as_of=min(stamps) if stamps else None, stale=stale)
 
     async def global_posture(self) -> PostureOverview:
         """% de cumplimiento POR organización (el de Wolf no se mezcla con externas)."""
@@ -285,6 +364,89 @@ class Aggregator:
         orgs.sort(key=lambda g: (g.org != "Wolf", -g.project_count, g.org))
         primary = orgs[0].org if orgs else "Wolf"
         return PostureOverview(orgs=orgs, primary=primary)
+
+    # ─── Comparación de postura entre ramas (ADR-024) ─────────────────────────
+    async def compare_refs(
+        self, project: ProjectConfig, refs: list[str], baseline: str
+    ) -> PostureComparison:
+        """Puntúa cada `ref` con SOLO los checks conscientes de la rama y entrega el
+        delta vs `baseline`. Read-only y al vuelo (ADR-001/012). MVP: forge GitHub y
+        check ci-green (ver BRANCH_COMPARABLE_CHECKS). `baseline` ∈ `refs` (lo valida
+        la ruta). NO es histórico (ADR-019): es el estado AL HEAD de cada rama."""
+        forge = self._forge_source(project)
+        if forge != "github":
+            raise BranchCompareUnsupported(
+                "La comparación por rama (MVP) solo está disponible para proyectos con "
+                "GitHub Actions."
+            )
+        connector = self._build_connector(forge)
+        if connector is None or not hasattr(connector, "fetch_summary_for_ref"):
+            raise BranchCompareUnsupported("El proyecto no tiene GitHub configurado.")
+
+        async def _ci_for(ref: str) -> SourceResult:
+            # Caché por ref: una rama no pisa a otra (clave separada del summary normal).
+            return await self._cached_fetch(
+                f"{project.key}:{forge}:summary:ref:{ref}",
+                lambda ref=ref: connector.fetch_summary_for_ref(project, ref),
+            )
+
+        ci_blocks = await asyncio.gather(*(_ci_for(r) for r in refs))
+        nc = SourceResult(status=SourceStatus.not_configured)
+        now = datetime.now(UTC)
+        scored: dict[str, tuple[SourceResult, object]] = {}
+        for ref, ci in zip(refs, ci_blocks, strict=True):
+            summary = ProjectSummary(
+                key=project.key, name=project.name, org=project.org,
+                ci=ci, findings=nc, quality=nc, release=nc, containers=nc,
+                generated_at=now,
+            )
+            scored[ref] = (ci, score_project(summary, only_checks=BRANCH_COMPARABLE_CHECKS))
+
+        base_ps = scored[baseline][1]
+        base_fails = {c.id for c in base_ps.checks if c.result == "fail"}
+
+        ref_blocks: list[RefPosture] = []
+        for ref in refs:
+            ci, ps = scored[ref]
+            is_base = ref == baseline
+            delta = (
+                None
+                if is_base or ps.score is None or base_ps.score is None
+                else ps.score - base_ps.score
+            )
+            fails = {c.id for c in ps.checks if c.result == "fail"}
+            passes = {c.id for c in ps.checks if c.result == "pass"}
+            ref_blocks.append(
+                RefPosture(
+                    ref=ref,
+                    ci_branch=ci.data.branch if ci.data is not None else None,
+                    posture=ps,
+                    delta_vs_baseline=0 if is_base else delta,
+                    new_fails=[] if is_base else sorted(fails - base_fails),
+                    resolved_fails=[] if is_base else sorted(passes & base_fails),
+                )
+            )
+
+        # Ranking: score desc; sin_datos (None) al final; empate → orden pedido.
+        order = {r: i for i, r in enumerate(refs)}
+        ranking = sorted(
+            refs,
+            key=lambda r: (scored[r][1].score is None, -(scored[r][1].score or 0), order[r]),
+        )
+        note = (
+            "Comparación acotada a ci-green: las demás fuentes (DefectDojo/Trivy/Harbor "
+            "y SonarQube Community) no son conscientes de la rama. Es el estado AL HEAD "
+            "de cada rama, no una línea de tiempo histórica."
+        )
+        return PostureComparison(
+            project_key=project.key,
+            baseline=baseline,
+            comparable_checks=sorted(BRANCH_COMPARABLE_CHECKS),
+            refs=ref_blocks,
+            ranking=ranking,
+            note=note,
+            generated_at=now,
+        )
 
     # ─── Dashboard por herramienta (vista transpuesta) ────────────────────────
     @staticmethod
@@ -388,6 +550,34 @@ class Aggregator:
             f"{project.key}:{forge}:release", lambda: connector.fetch_release(project)
         )
 
+    async def _provenance_block(self, project: ProjectConfig) -> SourceResult:
+        # Procedencia (último commit + autor) del forge del proyecto, read-only (ADR-001).
+        # Jenkins-only no tiene API de commits → not_configured (degrada a "sin datos").
+        forge = self._forge_source(project)
+        if forge is None:
+            return SourceResult(status=SourceStatus.not_configured)
+        connector = self._build_connector(forge)
+        if connector is None or not hasattr(connector, "fetch_provenance"):
+            return SourceResult(status=SourceStatus.not_configured)
+        return await self._cached_fetch(
+            f"{project.key}:{forge}:provenance", lambda: connector.fetch_provenance(project)
+        )
+
+    async def cve_fixes(self, project_key: str) -> dict[str, str | None] | None:
+        """CVE → versión fija del último reporte Trivy del proyecto (solo lectura, ADR-001).
+        None = no se pudo saber (proyecto/Trivy no configurado o fuente caída): quien
+        llama NO debe inferir "sin parche" de eso."""
+        project = next((p for p in self._config.projects if p.key == project_key), None)
+        if project is None or "trivy" not in self._config.sources or not self._project_uses(project, "trivy"):
+            return None
+        connector = self._build_connector("trivy")
+        if connector is None:
+            return None
+        try:
+            return await connector.cve_fixes(project)
+        except ConnectorUnavailable:
+            return None
+
     async def get_dependencies(self, project: ProjectConfig) -> SourceResult:
         """Inventario de dependencias (Trivy). Misma caché TTL + degradación."""
         connector = (
@@ -425,6 +615,34 @@ class Aggregator:
                 max_nodes=self._settings.codemap_max_nodes,
                 max_depth=self._settings.codemap_max_depth,
             ),
+        )
+
+    async def get_recent_runs(self, project: ProjectConfig, limit: int = 5) -> list:
+        """Últimos runs del CI de GitHub (solo lectura) para el mapa de pipeline.
+        [] si el proyecto no usa GitHub o la fuente falla (nunca lanza)."""
+        connector = (
+            self._build_connector("github")
+            if "github" in self._config.sources and self._project_uses(project, "github")
+            else None
+        )
+        if connector is None:
+            return []
+        result = await self._cached_fetch(
+            f"{project.key}:github:recent_runs:{limit}", lambda: connector.recent_runs(project, limit)
+        )
+        return list(result.data or [])
+
+    async def get_registry_image(self, project: ProjectConfig) -> SourceResult:
+        """Presencia de imagen en Harbor (solo lectura). Caché TTL + degradación."""
+        connector = (
+            self._build_connector("harbor")
+            if "harbor" in self._config.sources and self._project_uses(project, "harbor")
+            else None
+        )
+        if connector is None:
+            return SourceResult(status=SourceStatus.not_configured)
+        return await self._cached_fetch(
+            f"{project.key}:harbor:image", lambda: connector.image_presence(project)
         )
 
     async def get_source_detail(self, project: ProjectConfig, source: str) -> SourceDetail:
@@ -474,6 +692,11 @@ class Aggregator:
             ci_status=ci_data.status if ci_data else None,
             findings=findings_data.counts if findings_data else None,
             container_findings=containers_data.counts if containers_data else None,
+            container_accepted=(
+                containers_data.accepted
+                if containers_data and containers_data.accepted.total
+                else None
+            ),
             quality_gate=quality_data.quality_gate if quality_data else None,
             worst_source_status=worst,
             posture_score=posture.score if posture else None,

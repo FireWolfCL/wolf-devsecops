@@ -16,7 +16,7 @@ from urllib.parse import quote
 import httpx
 
 from ..core.config import ProjectConfig
-from ..models import CIStatus, CISummary, ProbeResult, ReleaseSummary, SourceDetail
+from ..models import CIStatus, CISummary, ProbeResult, ProvenanceInfo, ReleaseSummary, SourceDetail
 from .base import Connector, ConnectorUnavailable
 
 # status de un pipeline GitLab → nuestro CIStatus normalizado.
@@ -116,6 +116,52 @@ class GitLabConnector(Connector):
         except ValueError as exc:
             raise ConnectorUnavailable("Respuesta de GitLab no es JSON válido.") from exc
         return data[0] if isinstance(data, list) and data else None
+
+    async def fetch_provenance(self, project: ProjectConfig) -> ProvenanceInfo:
+        """Procedencia read-only (ADR-001): último commit del branch por defecto +
+        autor, SIN depender de pipelines. 2 GET: proyecto (default_branch) y el último
+        commit de ese branch. La API de commits de GitLab no expone username, así que
+        `author` es el nombre git (`author_is_login=False`); si falta, None → "desconocido"."""
+        gl = project.gitlab
+        if gl is None:
+            raise ConnectorUnavailable("El proyecto no define bloque 'gitlab'.")
+        pid = self._pid(project)
+        try:
+            async with self._client() as client:
+                proj_resp = await client.get(
+                    f"{self._api}/projects/{pid}", headers=self._headers()
+                )
+                if proj_resp.status_code != 200:
+                    raise ConnectorUnavailable(f"GitLab respondió HTTP {proj_resp.status_code}.")
+                branch = gl.ref or proj_resp.json().get("default_branch") or "HEAD"
+                commit_resp = await client.get(
+                    f"{self._api}/projects/{pid}/repository/commits",
+                    headers=self._headers(),
+                    params={"per_page": "1", "ref_name": branch},
+                )
+        except httpx.HTTPError as exc:
+            raise ConnectorUnavailable("No se pudo contactar la API de GitLab.") from exc
+        except ValueError as exc:
+            raise ConnectorUnavailable("Respuesta de GitLab no es JSON válido.") from exc
+        if commit_resp.status_code != 200:
+            raise ConnectorUnavailable(f"GitLab respondió HTTP {commit_resp.status_code}.")
+        try:
+            data = commit_resp.json()
+        except ValueError as exc:
+            raise ConnectorUnavailable("Respuesta de GitLab no es JSON válido.") from exc
+        if not isinstance(data, list) or not data:
+            return ProvenanceInfo(default_branch=branch, source="gitlab")
+        c = data[0]
+        return ProvenanceInfo(
+            default_branch=branch,
+            sha_short=str(c.get("short_id") or c.get("id") or "")[:7] or None,
+            message=(c.get("title") or None),
+            author=(c.get("author_name") or None),
+            author_is_login=False,  # la API de commits de GitLab no da username
+            authored_at=_parse_dt(c.get("authored_date") or c.get("created_at")),
+            html_url=c.get("web_url"),
+            source="gitlab",
+        )
 
     async def fetch_summary(self, project: ProjectConfig) -> CISummary:
         gl = project.gitlab

@@ -13,6 +13,7 @@ import { License } from "./pages/License";
 import { Login } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
+import { SSO } from "./pages/SSO";
 import { UpdateCenter } from "./pages/UpdateCenter";
 import { Users } from "./pages/Users";
 import { ProjectDetailView } from "./views/ProjectDetailView";
@@ -22,6 +23,7 @@ import { CodeMapView } from "./views/CodeMapView";
 import { DependencyInventoryView } from "./views/DependencyInventoryView";
 import { AcceptedRisksView } from "./views/AcceptedRisksView";
 import { PostureHistoryView } from "./views/PostureHistoryView";
+import { BranchCompareView } from "./views/BranchCompareView";
 import { ReportView } from "./views/ReportView";
 import { ActivityView } from "./views/ActivityView";
 
@@ -72,6 +74,13 @@ function HistoryRoute() {
   return <PostureHistoryView projectKey={key} onBack={() => navigate(`/projects/${encodeURIComponent(key)}`)} />;
 }
 
+function CompareRoute() {
+  const { key } = useParams<{ key: string }>();
+  const navigate = useNavigate();
+  if (!key) return <Navigate to="/" replace />;
+  return <BranchCompareView projectKey={key} onBack={() => navigate(`/projects/${encodeURIComponent(key)}`)} />;
+}
+
 export function App() {
   return (
     <Routes>
@@ -92,6 +101,7 @@ export function App() {
         <Route path="projects/:key/report" element={<ReportRoute />} />
         <Route path="projects/:key/deps" element={<DepsRoute />} />
         <Route path="projects/:key/history" element={<HistoryRoute />} />
+        <Route path="projects/:key/compare" element={<CompareRoute />} />
         <Route path="projects/:key/codemap" element={<CodeMapRoute />} />
         <Route path="projects/:key/code-review" element={<CodeReviewRoute />} />
         <Route path="profile" element={<Profile />} />
@@ -99,6 +109,7 @@ export function App() {
           <Route index element={<Navigate to="/admin/users" replace />} />
           <Route path="users" element={<Users />} />
           <Route path="integraciones" element={<Integraciones />} />
+          <Route path="sso" element={<SSO />} />
           <Route path="settings" element={<Settings />} />
           <Route path="license" element={<License />} />
           <Route path="ai" element={<AIConfig />} />

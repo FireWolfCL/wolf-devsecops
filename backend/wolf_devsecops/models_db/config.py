@@ -27,13 +27,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from ._shared import new_uuid
+from ._shared import new_uuid, tenant_id_column
 
 
 class SourceConfigRow(Base):
     __tablename__ = "source_config"
+    # ADR-022 F0: PK surrogate uuid + nombre único POR TENANT (antes PK = name global).
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_source_config_tenant_name"),)
 
-    name: Mapped[str] = mapped_column(String(40), primary_key=True)  # github/defectdojo/...
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    tenant_id: Mapped[str] = tenant_id_column()
+    name: Mapped[str] = mapped_column(String(40), nullable=False)  # github/defectdojo/...
     url: Mapped[str] = mapped_column(String(400), nullable=False)
     token_env: Mapped[str] = mapped_column(String(120), nullable=False)  # NOMBRE, no valor
     # Almacén cifrado OPT-IN del token (0006, COMPLEMENTA ADR-002). Fernet ciphertext
@@ -57,8 +61,14 @@ class ProjectRow(Base):
     __tablename__ = "projects"
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    tenant_id: Mapped[str] = tenant_id_column()
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # DEPRECADO (ADR-022 F0): string denormalizado, se conserva una release. La verdad pasa
+    # a `organization_id` (tabla `organizations`). NULL mientras el código de F0 no lo fija.
     org: Mapped[str] = mapped_column(String(100), nullable=False, server_default="Wolf")
+    organization_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -70,6 +80,7 @@ class ProjectSourceRow(Base):
     __table_args__ = (UniqueConstraint("project_key", "source", name="uq_project_source"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    tenant_id: Mapped[str] = tenant_id_column()
     project_key: Mapped[str] = mapped_column(
         String(100), ForeignKey("projects.key", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -81,8 +92,11 @@ class ProjectSourceRow(Base):
 
 class AISettingsRow(Base):
     __tablename__ = "ai_settings"
+    # ADR-022 F0: una fila por tenant. (`id` sigue siendo el PK entero = 1; ver nota F1.)
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_ai_settings_tenant"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)  # fila única
+    tenant_id: Mapped[str] = tenant_id_column()
     provider: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
     model: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     base_url: Mapped[str | None] = mapped_column(String(400), nullable=True)
@@ -102,8 +116,11 @@ class LDAPConfigRow(Base):
     """
 
     __tablename__ = "ldap_config"
+    # ADR-022 F0: una fila por tenant. (`id` sigue siendo el PK entero = 1; ver nota F1.)
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_ldap_config_tenant"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)  # fila única
+    tenant_id: Mapped[str] = tenant_id_column()
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Réplicas del directorio, ej. ["ldaps://dc1.corp:636", "ldaps://dc2.corp:636"].
     # Se prueban TODAS antes de rechazar (replication lag da fallos intermitentes).
@@ -131,8 +148,19 @@ class LDAPConfigRow(Base):
 
 
 class SystemConfigRow(Base):
+    """Clave/valor de config.
+
+    `tenant_id` (ADR-022 F0) es NULLABLE a propósito y SIN server_default:
+    NULL = clave de INSTANCIA / plano de control (p. ej. la licencia del despliegue,
+    marcadores del scheduler global); no-NULL = clave POR-TENANT. El PK sigue siendo
+    `key` en F0 (una clave por instancia); pasar a clave surrogate/compuesta es F1.
+    """
+
     __tablename__ = "system_config"
 
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    )
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     updated_at: Mapped[datetime | None] = mapped_column(

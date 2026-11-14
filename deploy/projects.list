@@ -4,16 +4,74 @@
 #   - URL git        -> repo REMOTO                 (se escanea con `trivy repo`)
 # Para AGREGAR cualquiera:  bash deploy/connect-projects.sh <nombre-o-URL>
 # (se agrega aquí y se re-escanea todo). Regenera config/projects.yaml.
-#
-# NOTA: esto es un EJEMPLO. Edítalo con tus propios proyectos. Los repos locales
-# que no existan en ~ simplemente se omiten.
 # =============================================================================
 
-# ── Dogfooding: el propio panel se escanea a sí mismo (repo local) ───────────
+# ── Wolf + productos (locales) ──────────────────────────────────────────────
+Wolf-Cloud
+Wolf-Test
+WIF
+Check4Work
+Scheduler
+Iron-Wolf
+DATA-Manager
+Slurm-View-Piont
+Wolf-Tools-Kit
+Wolf-Licenses
+Wolf-Contable
+Wolf-Backup-System
+HawkEye
+Test-Simulator
 CICD
 
-# ── Ejemplos remotos públicos (IaC/código curado de lsst-it) ─────────────────
+# ── lsst-it (remotos, código/IaC curado) ────────────────────────────────────
 https://github.com/lsst-it/lsst-control
 https://github.com/lsst-it/puppet-daq
 https://github.com/lsst-it/k8s-cookbook
 https://github.com/lsst-it/cnpg-backup
+https://github.com/lsst-it/puppet-anaconda
+https://github.com/lsst-it/puppet-pi
+https://github.com/lsst-it/puppet-dellperc
+https://github.com/lsst-it/puppet-smee
+https://github.com/lsst-it/puppet-nm
+https://github.com/lsst-it/puppet-foreman_envsync
+https://github.com/lsst-it/control-room-clock-repo
+https://github.com/lsst-it/docker-compose-ops
+https://github.com/lsst-it/foreman_envsync
+https://github.com/lsst-it/foreman_templates
+https://github.com/lsst-it/gnocpush
+https://github.com/lsst-it/htcondor-images
+https://github.com/lsst-it/ipa-scripts
+https://github.com/lsst-it/ittn-001
+https://github.com/lsst-it/ittn-002
+https://github.com/lsst-it/ittn-003
+https://github.com/lsst-it/ittn-004
+https://github.com/lsst-it/ittn-005
+https://github.com/lsst-it/ittn-006
+https://github.com/lsst-it/ittn-007
+https://github.com/lsst-it/ittn-008
+https://github.com/lsst-it/ittn-009
+https://github.com/lsst-it/ittn-010
+https://github.com/lsst-it/ittn-011
+https://github.com/lsst-it/ittn-012
+https://github.com/lsst-it/ittn-013
+https://github.com/lsst-it/ittn-014
+https://github.com/lsst-it/ittn-015
+https://github.com/lsst-it/ittn-016
+https://github.com/lsst-it/ittn-017
+https://github.com/lsst-it/ittn-018
+https://github.com/lsst-it/ittn-019
+https://github.com/lsst-it/ittn-020
+https://github.com/lsst-it/ittn-021
+https://github.com/lsst-it/ittn-022
+https://github.com/lsst-it/ittn-023
+https://github.com/lsst-it/ittn-024
+https://github.com/lsst-it/ittn-025
+https://github.com/lsst-it/ittn-026
+https://github.com/lsst-it/ittn-027
+https://github.com/lsst-it/ittn-028
+https://github.com/lsst-it/ittn-029
+https://github.com/lsst-it/ittn-030
+https://github.com/lsst-it/ittn-031
+https://github.com/lsst-it/ittn-032
+https://github.com/lsst-it/ittn-033
+https://github.com/lsst-it/ittn-034

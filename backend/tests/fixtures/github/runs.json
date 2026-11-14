@@ -8,7 +8,7 @@
       "status": "completed",
       "conclusion": "success",
       "head_branch": "main",
-      "html_url": "https://github.com/my-org/demo-app/actions/runs/9876543210",
+      "html_url": "https://github.com/FireWolfCL/Wolf-Cloud/actions/runs/9876543210",
       "created_at": "2026-10-31T11:58:00Z",
       "updated_at": "2026-10-31T12:00:00Z"
     }

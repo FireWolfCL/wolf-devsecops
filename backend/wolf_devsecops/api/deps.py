@@ -12,6 +12,7 @@ from ..core.cache import TTLCache
 from ..core.config import AppConfig
 from ..core.credentials import resolve_token
 from ..services import config_service
+from ..services.governance import DbGovernance, GovernanceProvider
 from ..settings import get_settings
 
 
@@ -22,17 +23,29 @@ def get_config() -> AppConfig:
 
 
 _aggregator: Aggregator | None = None
+# Overlay de gobierno (ADR-023): SINGLETON de módulo, vive aparte de la config.
+# Sobrevive al rebuild del Aggregator por cambio de config (el gobierno no es config),
+# así que una aceptación aprobada no se "des-invalida" al recargar el panel admin.
+_governance: GovernanceProvider | None = None
+
+
+def get_governance() -> GovernanceProvider:
+    global _governance
+    if _governance is None:
+        _governance = DbGovernance()
+    return _governance
 
 
 def get_aggregator() -> Aggregator:
     global _aggregator
     # Rebuild si la config cambió (hot-reload del panel admin, ADR-015): el
     # Aggregator es inmutable respecto a su config, así que se reconstruye cuando
-    # get_config() devuelve un AppConfig distinto al capturado.
+    # get_config() devuelve un AppConfig distinto al capturado. El overlay de gobierno
+    # es el MISMO singleton entre rebuilds (no se pierde el estado de aceptaciones).
     current = get_config()
     if _aggregator is None or _aggregator._config is not current:
         settings = get_settings()
-        _aggregator = Aggregator(current, TTLCache(settings.cache_ttl_seconds))
+        _aggregator = Aggregator(current, TTLCache(settings.cache_ttl_seconds), get_governance())
     return _aggregator
 
 

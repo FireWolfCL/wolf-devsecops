@@ -34,7 +34,8 @@ def _out(row: SourceException) -> ExceptionOut:
         finding_title=row.finding_title, category=row.category, kind=row.kind,
         justification=row.justification, status=row.status, created_by=row.created_by,
         created_at=row.created_at, approved_by=row.approved_by, approved_at=row.approved_at,
-        expires_at=row.expires_at,
+        expires_at=row.expires_at, cve_id=row.cve_id, fixed_version=row.fixed_version,
+        patchable_since=row.patchable_since,
     )
 
 

@@ -1,9 +1,9 @@
 {
   "SchemaVersion": 2,
-  "ArtifactName": "ghcr.io/firewolfcl/demo-app:1.0",
+  "ArtifactName": "ghcr.io/firewolfcl/wolf-cloud:1.0",
   "Results": [
     {
-      "Target": "demo-app (debian 12)",
+      "Target": "wolf-cloud (debian 12)",
       "Class": "os-pkgs",
       "Vulnerabilities": [
         { "VulnerabilityID": "CVE-0001", "Severity": "CRITICAL", "PkgName": "openssl" },

@@ -60,3 +60,17 @@ class TTLCache:
     async def clear(self) -> None:
         async with self._lock:
             self._store.clear()
+
+    async def invalidate(self, prefix: str | None = None) -> int:
+        """Descarta las entradas cuya clave empieza con `prefix` (o TODAS si es None).
+        Devuelve cuántas se descartaron. Es el motor del 'actualizar ahora' del panel:
+        la próxima lectura vuelve a pegarle a la fuente en vez de servir caché."""
+        async with self._lock:
+            if prefix is None:
+                n = len(self._store)
+                self._store.clear()
+                return n
+            keys = [k for k in self._store if k.startswith(prefix)]
+            for k in keys:
+                self._store.pop(k, None)
+            return len(keys)

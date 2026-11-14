@@ -19,7 +19,9 @@ from ..models import (
     ModuleNode,
     ModuleTree,
     ProbeResult,
+    ProvenanceInfo,
     ReleaseSummary,
+    RunInfo,
     SourceDetail,
 )
 from .base import Connector, ConnectorUnavailable
@@ -129,25 +131,39 @@ class GitHubConnector(Connector):
                 detail="No se pudo contactar la API de GitHub.",
             )
 
-    async def _latest_run(self, project: ProjectConfig) -> dict | None:
+    async def _runs(
+        self, project: ProjectConfig, per_page: int, branch: str | None = None
+    ) -> list[dict]:
+        """Baja `workflow_runs` del workflow de CI (una sola lectura GET).
+
+        `branch` acota los runs a una rama (`?branch=<ref>`): es lo que hace al check
+        ci-green consciente de la rama para la comparación entre ramas (ADR-024). Sin
+        `branch` el comportamiento es el de siempre (último run de cualquier rama)."""
         gh = project.github
         if gh is None:
-            return None
+            return []
         url = f"{self._base}/repos/{gh.repo}/actions/workflows/{gh.ci_workflow}/runs"
+        params: dict[str, object] = {"per_page": per_page}
+        if branch:
+            params["branch"] = branch
         try:
             async with self._client() as client:
-                resp = await client.get(url, headers=self._headers(), params={"per_page": 1})
+                resp = await client.get(url, headers=self._headers(), params=params)
         except httpx.HTTPError as exc:
             raise ConnectorUnavailable("No se pudo contactar la API de GitHub.") from exc
         if resp.status_code != 200:
             raise ConnectorUnavailable(f"GitHub respondió HTTP {resp.status_code}.")
-        runs = resp.json().get("workflow_runs", [])
+        try:
+            runs = resp.json().get("workflow_runs", [])
+        except ValueError as exc:
+            raise ConnectorUnavailable("Respuesta de GitHub no es JSON válido.") from exc
+        return [r for r in runs if isinstance(r, dict)]
+
+    async def _latest_run(self, project: ProjectConfig, branch: str | None = None) -> dict | None:
+        runs = await self._runs(project, 1, branch)
         return runs[0] if runs else None
 
-    async def fetch_summary(self, project: ProjectConfig) -> CISummary:
-        gh = project.github
-        run = await self._latest_run(project)
-        workflow = gh.ci_workflow if gh else "ci.yml"
+    def _ci_from_run(self, run: dict | None, workflow: str) -> CISummary:
         if run is None:
             return CISummary(status=CIStatus.unknown, workflow=workflow)
         return CISummary(
@@ -158,6 +174,100 @@ class GitHubConnector(Connector):
             html_url=run.get("html_url"),
             finished_at=_parse_dt(run.get("updated_at")),
         )
+
+    async def fetch_summary_for_ref(self, project: ProjectConfig, ref: str) -> CISummary:
+        """Estado de CI del último run de UNA rama (`ref`) — base de la comparación
+        entre ramas (ADR-024). Read-only (ADR-001). Si la rama no tiene runs, el status
+        queda `unknown` y el score lo trata como na (`no_verdict`): honesto, no inventa."""
+        gh = project.github
+        workflow = gh.ci_workflow if gh else "ci.yml"
+        run = await self._latest_run(project, ref)
+        return self._ci_from_run(run, workflow)
+
+    async def recent_runs(self, project: ProjectConfig, limit: int = 5) -> list[RunInfo]:
+        """Últimos `limit` runs del CI mapeados a RunInfo (mapa de pipeline, solo lectura).
+
+        Tolerante: proyecto sin bloque github o fuente caída → []. El actor cae de
+        `actor.login` a `triggering_actor.login`; el mensaje es la 1ª línea del commit.
+        """
+        if project.github is None:
+            return []
+        try:
+            runs = await self._runs(project, max(1, limit))
+        except ConnectorUnavailable:
+            return []
+        out: list[RunInfo] = []
+        for r in runs[:limit]:
+            actor = (r.get("actor") or {}).get("login") or (r.get("triggering_actor") or {}).get("login")
+            msg = ((r.get("head_commit") or {}).get("message") or "").strip()
+            first_line = msg.splitlines()[0].strip() if msg else ""
+            sha = str(r.get("head_sha") or "")[:7]
+            out.append(
+                RunInfo(
+                    actor=actor,
+                    sha_short=sha or None,
+                    message=first_line or None,
+                    branch=r.get("head_branch"),
+                    event=r.get("event"),
+                    ci_state=_map_ci_status(r.get("conclusion"), r.get("status")),
+                    run_number=r.get("run_number"),
+                    html_url=r.get("html_url"),
+                    created_at=_parse_dt(r.get("created_at")),
+                )
+            )
+        return out
+
+    async def fetch_provenance(self, project: ProjectConfig) -> ProvenanceInfo:
+        """Procedencia read-only (ADR-001): último commit del branch por defecto +
+        autor, SIN depender de runs de CI. 2 GET: repo (default_branch) y el commit
+        HEAD de ese branch. El autor cae login→committer-login→nombre-git; si nada
+        hay, queda None y el front muestra "desconocido" (nunca se inventa)."""
+        gh = project.github
+        if gh is None:
+            raise ConnectorUnavailable("El proyecto no define bloque 'github'.")
+        try:
+            async with self._client() as client:
+                repo_resp = await client.get(f"{self._base}/repos/{gh.repo}", headers=self._headers())
+                if repo_resp.status_code != 200:
+                    raise ConnectorUnavailable(f"GitHub respondió HTTP {repo_resp.status_code}.")
+                branch = repo_resp.json().get("default_branch") or "HEAD"
+                commit_resp = await client.get(
+                    f"{self._base}/repos/{gh.repo}/commits/{branch}", headers=self._headers()
+                )
+        except httpx.HTTPError as exc:
+            raise ConnectorUnavailable("No se pudo contactar la API de GitHub.") from exc
+        except ValueError as exc:
+            raise ConnectorUnavailable("Respuesta de GitHub no es JSON válido.") from exc
+        if commit_resp.status_code != 200:
+            raise ConnectorUnavailable(f"GitHub respondió HTTP {commit_resp.status_code}.")
+        try:
+            c = commit_resp.json()
+        except ValueError as exc:
+            raise ConnectorUnavailable("Respuesta de GitHub no es JSON válido.") from exc
+        commit = c.get("commit") or {}
+        msg = (commit.get("message") or "").strip()
+        first_line = msg.splitlines()[0].strip() if msg else ""
+        # Autor: login de la cuenta (preferido) → committer login → nombre git del commit.
+        login = (c.get("author") or {}).get("login") or (c.get("committer") or {}).get("login")
+        git_name = (commit.get("author") or {}).get("name")
+        author = login or git_name or None
+        authored = (commit.get("author") or {}).get("date") or (commit.get("committer") or {}).get("date")
+        return ProvenanceInfo(
+            default_branch=branch,
+            sha_short=str(c.get("sha") or "")[:7] or None,
+            message=first_line or None,
+            author=author,
+            author_is_login=bool(login),
+            authored_at=_parse_dt(authored),
+            html_url=c.get("html_url"),
+            source="github",
+        )
+
+    async def fetch_summary(self, project: ProjectConfig) -> CISummary:
+        gh = project.github
+        run = await self._latest_run(project)
+        workflow = gh.ci_workflow if gh else "ci.yml"
+        return self._ci_from_run(run, workflow)
 
     async def fetch_detail(self, project: ProjectConfig) -> SourceDetail:
         run = await self._latest_run(project)

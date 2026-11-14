@@ -17,12 +17,14 @@ from .config import (
 from .events import EventRead, ProjectEvent
 from .exceptions import SourceException
 from .posture import PostureSnapshot
+from .tenant import Organization, Tenant
 from .user import User
 
 __all__ = [
     "AuditLog",
     "AISettingsRow",
     "EventRead",
+    "Organization",
     "PostureSnapshot",
     "SourceException",
     "ProjectEvent",
@@ -30,5 +32,6 @@ __all__ = [
     "ProjectSourceRow",
     "SourceConfigRow",
     "SystemConfigRow",
+    "Tenant",
     "User",
 ]

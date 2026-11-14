@@ -36,16 +36,16 @@ sources:
     token_env: "TRIVY_TOKEN"
 
 projects:
-  - key: "cicd"
-    name: "CICD"
+  - key: "wolf-cloud"
+    name: "Wolf-Cloud"
     github:
-      repo: "FireWolfCL/wolf-devsecops"
+      repo: "FireWolfCL/Wolf-Cloud"
       ci_workflow: "ci.yml"
     defectdojo:
-      product: "CICD"
+      product: "Wolf-Cloud"
     sonarqube:
-      project_key: "cicd"
+      project_key: "wolf-cloud"
     harbor:
-      project: "cicd"
+      project: "wolf-cloud"
     trivy:
-      report_path: "cicd.json"
+      report_path: "wolf-cloud.json"

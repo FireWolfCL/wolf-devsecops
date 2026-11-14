@@ -14,6 +14,8 @@ import type {
   ExceptionItem,
   ExceptionList,
   ModuleTree,
+  PipelineMap,
+  PostureComparison,
   PostureHistory,
   PostureSparklines,
   PostureOverview,
@@ -32,6 +34,20 @@ export function fetchProjects(): Promise<ProjectListItem[]> {
 
 export function fetchProject(key: string): Promise<ProjectSummary> {
   return request<ProjectSummary>(`/api/v1/projects/${encodeURIComponent(key)}`);
+}
+
+/** Invalida la caché de agregación (operator/admin): la próxima lectura refetchea. */
+export function refreshAll(): Promise<{ invalidated: number }> {
+  return request<{ invalidated: number }>("/api/v1/refresh", { method: "POST" });
+}
+export function refreshProject(key: string): Promise<{ invalidated: number }> {
+  return request<{ invalidated: number }>(
+    `/api/v1/projects/${encodeURIComponent(key)}/refresh`, { method: "POST" },
+  );
+}
+
+export function fetchPipeline(key: string): Promise<PipelineMap> {
+  return request<PipelineMap>(`/api/v1/projects/${encodeURIComponent(key)}/pipeline`);
 }
 
 export function fetchPosture(): Promise<PostureOverview> {
@@ -69,6 +85,21 @@ export function fetchCodemap(key: string): Promise<ModuleTree> {
 export function fetchHistory(key: string, days?: number): Promise<PostureHistory> {
   const qs = days != null ? `?days=${encodeURIComponent(String(days))}` : "";
   return request<PostureHistory>(`/api/v1/projects/${encodeURIComponent(key)}/history${qs}`);
+}
+
+// Comparación de postura entre ramas (ADR-024). Read-only y al vuelo: NO escanea
+// ni persiste. 404 = proyecto desconocido; 400 = refs inválidas (la vista valida
+// antes); 422 = el forge no es comparable por rama (p. ej. no es GitHub).
+export function compareRefs(
+  key: string,
+  refs: string[],
+  baseline?: string,
+): Promise<PostureComparison> {
+  const qs = new URLSearchParams({ refs: refs.join(",") });
+  if (baseline) qs.set("baseline", baseline);
+  return request<PostureComparison>(
+    `/api/v1/projects/${encodeURIComponent(key)}/compare?${qs.toString()}`,
+  );
 }
 
 // Series de % por proyecto para los sparklines del dashboard (una sola llamada).

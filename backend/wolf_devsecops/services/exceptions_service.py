@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.aggregator import Aggregator
+from ..core.cve import extract_cve
 from ..models import ExceptionIn
 from ..models_db.events import ProjectEvent
 from ..models_db.exceptions import SourceException
@@ -103,6 +104,10 @@ async def create(
         project_key=project_key, source=data.source, finding_ref=data.finding_ref,
         finding_title=data.finding_title, category=data.category, kind=data.kind,
         justification=data.justification, created_by=username, created_by_id=user_id,
+        # Seguimiento de parche: el CVE explícito gana; si no, se deriva del título con regex
+        # estricta. Sin CVE bien formado → NULL (no se rastrea; no-op honesto).
+        cve_id=(data.cve_id.upper() if data.cve_id else extract_cve(data.finding_title)),
+        fixed_version=(data.fixed_version or None),
     )
     if data.kind == "risk_accepted":
         row.status = "proposed"
@@ -176,7 +181,12 @@ async def approve(
             target_id=f"{row.source}:{row.finding_ref}", detail={"kind": row.kind}, ip=ip, commit=False,
         )
         await session.commit()
+        # write_failed NO entra al conjunto aceptado (fail-closed), pero invalidamos
+        # por si acaso para que el neto gobernado se recalcule limpio (ADR-023).
+        await aggregator.invalidate_governance(row.project_key)
         raise exc
+    # Aceptación ya applied: refresca el overlay de gobierno para que el score la reste.
+    await aggregator.invalidate_governance(row.project_key)
     return row
 
 
@@ -201,6 +211,8 @@ async def revoke(
         detail={"kind": row.kind, "project": row.project_key}, ip=ip, commit=False,
     )
     await session.commit()
+    # El CVE vuelve a contar: refresca el overlay de gobierno (ADR-023).
+    await aggregator.invalidate_governance(row.project_key)
     return row
 
 
@@ -256,4 +268,52 @@ async def expire_due(session: AsyncSession, aggregator: Aggregator) -> int:
         )
     if due:
         await session.commit()
+        # Aceptaciones vencidas vuelven a contar: refresca el overlay de los afectados.
+        for pk in {row.project_key for row in due}:
+            await aggregator.invalidate_governance(pk)
     return len(due)
+
+
+async def check_patchable(session: AsyncSession, aggregator: Aggregator) -> int:
+    """Re-chequeo periódico (scheduler): ¿un riesgo aceptado "sin parche" ya tiene parche?
+
+    Candidatas: `risk_accepted` en `applied`, con `cve_id` y `fixed_version` NULL. Busca el CVE
+    en el último reporte Trivy del proyecto (vía aggregator, solo lectura: ADR-001, sin
+    escanear ni escribir a la fuente). Si ahora trae FixedVersion: fija `fixed_version` +
+    `patchable_since`, emite UN evento `exception_patchable` y audita. Dedup natural: al
+    quedar `fixed_version` fijado la fila deja de ser candidata → una alerta por excepción.
+    Si el reporte no está disponible (fuente caída/no configurada) la fila se deja intacta:
+    jamás se infiere nada de una lectura fallida. Devuelve cuántas pasaron a parchables.
+    """
+    q = select(SourceException).where(
+        SourceException.status == "applied",
+        SourceException.kind == "risk_accepted",
+        SourceException.cve_id.is_not(None),
+        SourceException.fixed_version.is_(None),
+    )
+    rows = list((await session.execute(q)).scalars())
+    fixes_by_project: dict[str, dict[str, str | None] | None] = {}  # 1 lectura por proyecto
+    now = datetime.now(UTC)
+    n = 0
+    for row in rows:
+        if row.project_key not in fixes_by_project:
+            fixes_by_project[row.project_key] = await aggregator.cve_fixes(row.project_key)
+        fixes = fixes_by_project[row.project_key]
+        fixed = fixes.get((row.cve_id or "").upper()) if fixes else None
+        if not fixed:
+            continue
+        row.fixed_version = fixed[:200]
+        row.patchable_since = now
+        session.add(ProjectEvent(
+            project_key=row.project_key, kind="exception_patchable", severity="warn",
+            detail={"cve": row.cve_id, "fixed_version": row.fixed_version, "source": row.source}))
+        await audit_service.record(
+            session, action="exception.patchable", actor_username="scheduler",
+            target_type="finding", target_id=f"{row.source}:{row.finding_ref}",
+            detail={"project": row.project_key, "cve": row.cve_id, "fixed_version": row.fixed_version},
+            commit=False,
+        )
+        n += 1
+    if n:
+        await session.commit()
+    return n

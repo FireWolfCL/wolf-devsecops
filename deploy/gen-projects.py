@@ -4,8 +4,7 @@
 Cada entrada (repo local o URL git) se convierte en un proyecto con su bloque
 `trivy` (report_path = <slug>.json, el reporte que dejó connect-projects.sh).
 Si el repo tiene remoto GitHub, se añade el bloque `github`. El proyecto
-`cicd` (dogfooding del propio panel) además lleva defectdojo/sonarqube/harbor
-(las fuentes generadas).
+`wolf-cloud` además lleva defectdojo/sonarqube/harbor (las fuentes generadas).
 
 Sin secretos en el YAML (ADR-002): solo `token_env` por nombre.
 """
@@ -28,13 +27,13 @@ SOURCES = {
     "trivy": {"base_url": "http://trivy:80", "token_env": "TRIVY_TOKEN"},
 }
 
-# Reviewer IA (F6, ADR-007): provider `local` = endpoint OpenAI-compatible (p. ej.
-# Ollama). Se importa DESHABILITADO; se activa con WOLF_AI_ENABLED=true + toggle del
-# panel, y requiere que el backend ALCANCE ese endpoint de IA. Override por entorno.
+# Reviewer IA (F6, ADR-007): provider `local` = endpoint OpenAI-compatible (ollama
+# en el host de IA). Se importa DESHABILITADO; se activa con WOLF_AI_ENABLED=true + toggle
+# del panel, y requiere que el backend ALCANCE ese endpoint. Override por entorno.
 AI = {
     "provider": os.environ.get("WOLF_AI_PROVIDER", "local"),
     "model": os.environ.get("WOLF_AI_MODEL", "qwen2.5:14b"),
-    "base_url": os.environ.get("WOLF_AI_BASE_URL", "http://ollama:11434/v1"),
+    "base_url": os.environ.get("WOLF_AI_BASE_URL", "http://localhost:11434/v1"),
 }
 
 
@@ -81,10 +80,10 @@ def main() -> None:
         proj: dict = {"key": key, "name": name, "org": org, "trivy": {"report_path": f"{key}.json"}}
         if gh:
             proj["github"] = {"repo": gh, "ci_workflow": "ci.yml"}
-        if key == "cicd":
-            proj["defectdojo"] = {"product": "CICD"}
-            proj["sonarqube"] = {"project_key": "cicd"}
-            proj["harbor"] = {"project": "cicd"}
+        if key == "wolf-cloud":
+            proj["defectdojo"] = {"product": "Wolf-Cloud"}
+            proj["sonarqube"] = {"project_key": "wolf-cloud"}
+            proj["harbor"] = {"project": "wolf-cloud"}
         projects.append(proj)
 
     with open(out_path, "w", encoding="utf-8") as f:
