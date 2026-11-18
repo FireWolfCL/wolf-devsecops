@@ -56,7 +56,12 @@ To feed them from **your** CI → DefectDojo there are ready-made pipelines: see
 
 <div align="center">
 
-<sub>📸 Screenshots coming soon — Dashboard · Project detail · Findings · Settings (sample data, project names anonymized).</sub>
+<a href="docs/img/dashboard.jpg"><img src="docs/img/dashboard.jpg" width="46%" alt="Dashboard — compliance score per project"/></a>
+<a href="docs/img/proyecto.jpg"><img src="docs/img/proyecto.jpg" width="46%" alt="Project detail — pipeline map and provenance"/></a>
+<a href="docs/img/hallazgos.jpg"><img src="docs/img/hallazgos.jpg" width="46%" alt="Posture breakdown — rubric, findings and containers"/></a>
+<a href="docs/img/settings.jpg"><img src="docs/img/settings.jpg" width="46%" alt="Integrations — connected sources and token status"/></a>
+
+<sub>Dashboard · Project detail · Posture breakdown · Integrations — sample data, project names anonymized.</sub>
 
 </div>
 

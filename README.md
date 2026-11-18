@@ -56,7 +56,12 @@ ver **[docs/PIPELINES.md](docs/PIPELINES.md)** y [`deploy/ci-examples/`](deploy/
 
 <div align="center">
 
-<sub>📸 Capturas en camino — Dashboard · Detalle de proyecto · Hallazgos · Settings (datos de ejemplo, proyectos anonimizados).</sub>
+<a href="docs/img/dashboard.jpg"><img src="docs/img/dashboard.jpg" width="46%" alt="Dashboard — nota de cumplimiento por proyecto"/></a>
+<a href="docs/img/proyecto.jpg"><img src="docs/img/proyecto.jpg" width="46%" alt="Detalle de proyecto — pipeline map y procedencia"/></a>
+<a href="docs/img/hallazgos.jpg"><img src="docs/img/hallazgos.jpg" width="46%" alt="Desglose de postura — rúbrica, hallazgos y contenedores"/></a>
+<a href="docs/img/settings.jpg"><img src="docs/img/settings.jpg" width="46%" alt="Integraciones — fuentes conectadas y estado de tokens"/></a>
+
+<sub>Dashboard · Detalle de proyecto · Desglose de postura · Integraciones — datos de ejemplo, proyectos anonimizados.</sub>
 
 </div>
 
