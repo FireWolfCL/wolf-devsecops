@@ -114,7 +114,35 @@ normalizes the sources into a common format and caches them.
 | **DB** | Posture snapshots, exceptions (accepted risks) and users. |
 | **WLA** | Verifies the signed (ES256) license that unlocks Pro/Enterprise. |
 
+### Refresh cycle
+
+```mermaid
+sequenceDiagram
+  participant S as Scheduler
+  participant A as Aggregator
+  participant C as Connectors
+  participant X as External sources
+  participant P as core/posture
+  participant DB as DB
+  S->>A: refresh project
+  A->>C: fetch_summary (in parallel)
+  C->>X: API / reports (read-only)
+  X-->>C: data
+  C-->>A: normalized contract
+  A->>P: compute score (governed net)
+  P-->>A: compliance %
+  A->>DB: store snapshot
+  Note over A,DB: the detail view reads live on each request
+```
+
 → Full architecture (modules, contracts, ADRs): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+
+## Status
+
+**Community working.** Backend (FastAPI) + frontend (React) operational; connectors
+for GitHub, SonarQube, DefectDojo, Trivy and Harbor, plus optional WSS; assisted
+installer (`deploy/install.sh`) and a posture rubric (`docs/POSTURE-RUBRIC.md`).
+Pro/Enterprise editions are in development. Design and architecture decisions in `docs/`.
 
 ## Stack
 
