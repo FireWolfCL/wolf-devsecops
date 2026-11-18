@@ -52,21 +52,69 @@ Findings are grouped by scan type (secrets · SAST · SCA · container · IaC ·
 To feed them from **your** CI → DefectDojo there are ready-made pipelines: see
 **[docs/PIPELINES.md](docs/PIPELINES.md)** and [`deploy/ci-examples/`](deploy/ci-examples/).
 
-## Architecture (overview)
+## Screenshots
 
-```
-  Browser                  Backend (FastAPI)              Sources
- ┌──────────┐   /api/*    ┌───────────────────┐  tokens  ┌───────────────┐
- │ Dashboard │ ─────────▶ │ proxy + connectors │ ───────▶ │ GitHub API     │
- │ (React)   │ ◀───────── │ normalize + cache  │ ◀─────── │ SonarQube API  │
- └──────────┘   JSON      └───────────────────┘          │ DefectDojo API │
-                           ▲ config/projects.yaml         │ Trivy · Harbor │
-                                                          │ WSS (optional) │
-                                                          └───────────────┘
+<div align="center">
+
+<sub>📸 Screenshots coming soon — Dashboard · Project detail · Findings · Settings (sample data, project names anonymized).</sub>
+
+</div>
+
+## Architecture
+
+**How the system connects** — the panel is *read-only* (ADR-001): it reads what
+your tools already produce, normalizes it to a common contract and scores it. It
+never writes back to the sources.
+
+```mermaid
+flowchart LR
+  subgraph SRC["External sources · read-only"]
+    GH["GitHub / GitLab / Jenkins<br/>CI + releases"]
+    TR["Trivy<br/>JSON reports"]
+    DD["DefectDojo<br/>findings"]
+    SQ["SonarQube<br/>quality + coverage"]
+    HB["Harbor<br/>image CVEs"]
+    WSS["Wolf Security Suite<br/>(optional)"]
+  end
+
+  subgraph PANEL["Wolf DevSecOps · read-only (ADR-001)"]
+    direction TB
+    CON["connectors/<br/>one per source → normalized contract"]
+    AGG["core/aggregator<br/>concurrency · cache · degradation"]
+    GOV["services/governance<br/>governed net (accepted risks)"]
+    POS["core/posture<br/>rubric → compliance score"]
+    API["api/ FastAPI<br/>/api/v1/projects"]
+    DB[("DB · snapshots · exceptions · users")]
+    SCH["scheduler<br/>poll ~2h"]
+  end
+
+  FE["React frontend<br/>dashboard · findings · settings"]
+  WLA["Wolf License Authority<br/>verifies ES256 license"]
+
+  SRC --> CON --> AGG --> POS --> API --> FE
+  GOV --> AGG
+  AGG --> DB
+  SCH --> AGG
+  DB --> GOV
+  WLA -. pro/enterprise .-> API
 ```
 
 The backend exists so **tokens live on the server**, never in the browser. It
 normalizes the sources into a common format and caches them.
+
+### Layers
+
+| Layer | Responsibility |
+|---|---|
+| **Frontend** (React) | Dashboard, findings and settings. Never sees the tokens. |
+| **API** (FastAPI) | Translates HTTP ⇄ aggregator; keeps tokens on the server. |
+| **Aggregator** (`core/aggregator`) | Calls connectors in parallel, applies cache and degradation, bakes the governed net and the score. |
+| **Connectors** (`connectors/`) | One per source; translate each external API into the normalized contract. Read-only. |
+| **Scheduler** | Periodic poll (~2h) → stores a posture *snapshot* in the DB. |
+| **DB** | Posture snapshots, exceptions (accepted risks) and users. |
+| **WLA** | Verifies the signed (ES256) license that unlocks Pro/Enterprise. |
+
+→ Full architecture (modules, contracts, ADRs): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
 ## Stack
 

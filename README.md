@@ -52,21 +52,90 @@ Los Hallazgos se agrupan por tipo de escaneo (secrets · SAST · SCA · containe
 IaC · DAST). Para alimentarlos desde **tu** CI → DefectDojo hay pipelines listos:
 ver **[docs/PIPELINES.md](docs/PIPELINES.md)** y [`deploy/ci-examples/`](deploy/ci-examples/).
 
-## Arquitectura (resumen)
+## Capturas
 
-```
-  Navegador                Backend (FastAPI)              Fuentes
- ┌──────────┐   /api/*    ┌───────────────────┐  tokens  ┌───────────────┐
- │ Dashboard │ ─────────▶ │ proxy + conectores │ ───────▶ │ GitHub API     │
- │ (React)   │ ◀───────── │ normaliza + cachea │ ◀─────── │ SonarQube API  │
- └──────────┘   JSON      └───────────────────┘          │ DefectDojo API │
-                           ▲ config/projects.yaml         │ Trivy · Harbor │
-                                                          │ WSS (opcional) │
-                                                          └───────────────┘
+<div align="center">
+
+<sub>📸 Capturas en camino — Dashboard · Detalle de proyecto · Hallazgos · Settings (datos de ejemplo, proyectos anonimizados).</sub>
+
+</div>
+
+## Arquitectura
+
+**Cómo se conecta el sistema** — el panel es *read-only* (ADR-001): lee lo que ya
+producen tus herramientas, lo normaliza a un contrato común y lo puntúa. Nunca
+escribe en las fuentes.
+
+```mermaid
+flowchart LR
+  subgraph SRC["Fuentes externas · solo lectura"]
+    GH["GitHub / GitLab / Jenkins<br/>CI + releases"]
+    TR["Trivy<br/>reportes JSON"]
+    DD["DefectDojo<br/>hallazgos"]
+    SQ["SonarQube<br/>calidad + coverage"]
+    HB["Harbor<br/>CVE de imágenes"]
+    WSS["Wolf Security Suite<br/>(opcional)"]
+  end
+
+  subgraph PANEL["Wolf DevSecOps · read-only (ADR-001)"]
+    direction TB
+    CON["connectors/<br/>1 por fuente → contrato normalizado"]
+    AGG["core/aggregator<br/>concurrencia · caché · degradación"]
+    GOV["services/governance<br/>neto gobernado (riesgos aceptados)"]
+    POS["core/posture<br/>rúbrica → nota de cumplimiento"]
+    API["api/ FastAPI<br/>/api/v1/projects"]
+    DB[("BD · snapshots · excepciones · usuarios")]
+    SCH["scheduler<br/>poll ~2h"]
+  end
+
+  FE["Frontend React<br/>dashboard · hallazgos · settings"]
+  WLA["Wolf License Authority<br/>verifica licencia ES256"]
+
+  SRC --> CON --> AGG --> POS --> API --> FE
+  GOV --> AGG
+  AGG --> DB
+  SCH --> AGG
+  DB --> GOV
+  WLA -. pro/enterprise .-> API
 ```
 
 El backend es necesario para que los **tokens vivan en el servidor**, nunca en
 el navegador. Normaliza las fuentes a un formato común y cachea.
+
+### Capas
+
+| Capa | Responsabilidad |
+|---|---|
+| **Frontend** (React) | Dashboard, hallazgos y settings. Nunca ve los tokens. |
+| **API** (FastAPI) | Traduce HTTP ⇄ agregador; mantiene los tokens en el servidor. |
+| **Aggregator** (`core/aggregator`) | Invoca los conectores en paralelo, aplica caché y degradación, hornea el neto gobernado y la nota. |
+| **Connectors** (`connectors/`) | Uno por fuente; traducen cada API externa al contrato normalizado. Solo lectura. |
+| **Scheduler** | Poll periódico (~2 h) → guarda un *snapshot* de postura en la BD. |
+| **BD** | Snapshots de postura, excepciones (riesgos aceptados) y usuarios. |
+| **WLA** | Verifica la licencia firmada (ES256) que habilita Pro/Enterprise. |
+
+### Ciclo de un refresco
+
+```mermaid
+sequenceDiagram
+  participant S as Scheduler
+  participant A as Aggregator
+  participant C as Connectors
+  participant X as Fuentes externas
+  participant P as core/posture
+  participant DB as BD
+  S->>A: refrescar proyecto
+  A->>C: fetch_summary (en paralelo)
+  C->>X: API / reportes (read-only)
+  X-->>C: datos
+  C-->>A: contrato normalizado
+  A->>P: calcular nota (neto gobernado)
+  P-->>A: compliance %
+  A->>DB: guardar snapshot
+  Note over A,DB: la vista de detalle lee en vivo en cada request
+```
+
+→ Arquitectura completa (módulos, contratos, ADRs): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
 ## Estado
 

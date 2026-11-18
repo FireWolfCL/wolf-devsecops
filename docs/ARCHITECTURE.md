@@ -26,6 +26,47 @@ contrato (§9).
 no es fuente de verdad. Solo lee y unifica. (El instalador todo-en-uno sí puede correr
 Trivy como conveniencia de arranque; esa frontera se detalla en §10.)
 
+### Diagrama de conexión
+
+```mermaid
+flowchart LR
+  subgraph SRC["Fuentes externas · solo lectura"]
+    GH["GitHub / GitLab / Jenkins"]
+    TR["Trivy (JSON)"]
+    DD["DefectDojo"]
+    SQ["SonarQube"]
+    HB["Harbor"]
+    WSS["Wolf Security Suite (opcional)"]
+  end
+
+  subgraph PANEL["Backend FastAPI · read-only (ADR-001)"]
+    direction TB
+    CON["connectors/ (base · registry)<br/>1 clase por fuente"]
+    AGG["core/aggregator<br/>concurrencia · caché · degradación por fuente"]
+    GOV["services/governance<br/>neto gobernado (ADR-023)"]
+    POS["core/posture<br/>rúbrica de cumplimiento"]
+    CRED["core/credentials<br/>token_env → token (en memoria)"]
+    API["api/ routes_*<br/>/api/v1/*"]
+    DB[("BD · snapshots · source_exceptions · users")]
+    SCH["scheduler<br/>poll periódico"]
+  end
+
+  FE["Frontend React/Vite<br/>/api/*"]
+  ENV["os.environ<br/>(tokens, nunca en YAML)"]
+
+  SRC --> CON --> AGG --> POS --> API --> FE
+  ENV --> CRED --> CON
+  GOV --> AGG
+  DB --> GOV
+  AGG --> DB
+  SCH --> AGG
+```
+
+Los tokens viven solo en el servidor (ADR-002): `core/credentials` los resuelve desde
+`os.environ` a un mapa en memoria; `config/projects.yaml` solo declara `token_env`, nunca
+el valor. La vista de detalle lee en vivo en cada request; la nota del dashboard sale del
+último *snapshot* que escribe el scheduler.
+
 ---
 
 ## 1. Contrato de datos normalizado (`backend/wolf_devsecops/models.py`)
